@@ -1,6 +1,7 @@
 package com.jnrptt.eventos.dto;
 
 import com.jnrptt.eventos.model.TiposEntrada;
+import com.jnrptt.eventos.model.TipoEntrada;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -19,4 +20,7 @@ public record TipoEntradaRequest(
         @Positive(message = "El aforo total debe ser mayor que 0")
         Integer aforoTotal
 ) {
+    public TipoEntrada toTipoEntrada() {
+        return new TipoEntrada(null, nombre, precio, aforoTotal, aforoTotal, null);
+    }
 }

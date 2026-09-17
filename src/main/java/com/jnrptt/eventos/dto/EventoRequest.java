@@ -1,5 +1,6 @@
 package com.jnrptt.eventos.dto;
 
+import com.jnrptt.eventos.model.Evento;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -23,6 +24,22 @@ public record EventoRequest(
         String lugar,
 
         @NotEmpty(message = "El evento debe tener al menos un tipo de entrada")
-        List<@Valid TipoEntradaRequest> tiposEntrada
+        List<@Valid TipoEntradaRequest> tipoEntrada
 ) {
+        public Evento toEvento() {
+                Evento evento = new Evento(
+                        null,
+                        nombre,
+                        descripcion,
+                        fecha,
+                        ciudad,
+                        lugar,
+                        tipoEntrada.stream()
+                                .map(TipoEntradaRequest::toTipoEntrada)
+                                .toList()
+                );
+
+                evento.getTipoEntrada().forEach(entrada -> entrada.setEvento(evento));
+                return evento;
+        }
 }
