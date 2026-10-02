@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public record EventoRequest(
@@ -34,9 +35,9 @@ public record EventoRequest(
                         fecha,
                         ciudad,
                         lugar,
-                        tipoEntrada.stream()
+                        new ArrayList<>(tipoEntrada.stream()
                                 .map(TipoEntradaRequest::toTipoEntrada)
-                                .toList()
+                                .toList())
                 );
 
                 evento.getTipoEntrada().forEach(entrada -> entrada.setEvento(evento));

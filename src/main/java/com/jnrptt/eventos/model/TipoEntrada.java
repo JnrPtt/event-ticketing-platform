@@ -20,7 +20,7 @@ public class TipoEntrada {
     private Long id;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "tipo",nullable = false)
+    @Column(name = "tipo", nullable = false)
     private TiposEntrada nombre;
 
     @Column(name = "precio", nullable = false)
@@ -32,8 +32,8 @@ public class TipoEntrada {
     @Column(name = "aforo_disponible", nullable = false)
     private Integer aforoDisponible;
 
-    @ManyToOne
-    @JoinColumn(name = "evento_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "evento_id", nullable = false)
     private Evento evento;
 }
 

@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -34,6 +35,6 @@ public class Evento {
     @Column(name = "lugar", nullable = false)
     private String lugar;
 
-    @OneToMany(mappedBy = "evento")
-    private List<TipoEntrada> tipoEntrada;
+    @OneToMany(mappedBy = "evento", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<TipoEntrada> tipoEntrada = new ArrayList<>();
 }
