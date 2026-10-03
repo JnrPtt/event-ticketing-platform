@@ -4,7 +4,10 @@ import com.jnrptt.eventos.model.Evento;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 public record EventoRequest(
@@ -14,8 +17,8 @@ public record EventoRequest(
         @NotBlank(message = "La descripción es obligatoria")
         String descripcion,
 
-        @NotBlank(message = "La fecha es obligatoria")
-        String fecha,
+        @NotNull(message = "La fecha es obligatoria")
+        LocalDate fecha,
 
         @NotBlank(message = "La ciudad es obligatoria")
         String ciudad,
@@ -31,12 +34,12 @@ public record EventoRequest(
                         null,
                         nombre,
                         descripcion,
-                        fecha,
+                        fecha.toString(),
                         ciudad,
                         lugar,
-                        tipoEntrada.stream()
+                        new ArrayList<>(tipoEntrada.stream()
                                 .map(TipoEntradaRequest::toTipoEntrada)
-                                .toList()
+                                .toList())
                 );
 
                 evento.getTipoEntrada().forEach(entrada -> entrada.setEvento(evento));

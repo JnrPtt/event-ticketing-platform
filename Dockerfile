@@ -17,7 +17,7 @@ WORKDIR /app
 
 RUN groupadd --system spring && useradd --system --gid spring spring
 
-COPY --from=build /workspace/build/libs/*.jar app.jar
+COPY --from=build /workspace/build/libs/app.jar app.jar
 
 USER spring
 
