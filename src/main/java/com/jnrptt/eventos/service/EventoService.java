@@ -11,8 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -23,6 +25,7 @@ public class EventoService {
 
     @Transactional
     public Evento createEvento(EventoRequest eventoRequest) {
+        validarTiposEntradaUnicos(eventoRequest);
         return eventoRepository.save(eventoRequest.toEvento());
     }
 
@@ -47,6 +50,7 @@ public class EventoService {
 
     @Transactional
     public Evento editEventoById(Long id, EventoRequest eventoRequest) {
+        validarTiposEntradaUnicos(eventoRequest);
         Evento replacement = eventoRequest.toEvento();
         Evento evento = getEventoById(id);
         evento.setNombre(replacement.getNombre());
@@ -74,7 +78,24 @@ public class EventoService {
             actual.setAforoDisponible(nueva.getAforoTotal() - vendidas);
             evento.getTipoEntrada().add(actual);
         });
+        existentes.values().forEach(eliminada -> {
+            int vendidas = eliminada.getAforoTotal() - eliminada.getAforoDisponible();
+            if (vendidas > 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "No se puede eliminar " + eliminada.getNombre() + " porque tiene entradas vendidas (" + vendidas + ")");
+            }
+        });
         return evento;
+    }
+
+    private void validarTiposEntradaUnicos(EventoRequest eventoRequest) {
+        Set<TiposEntrada> vistos = EnumSet.noneOf(TiposEntrada.class);
+        eventoRequest.tipoEntrada().forEach(entrada -> {
+            if (!vistos.add(entrada.nombre())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "El tipo de entrada " + entrada.nombre() + " está repetido");
+            }
+        });
     }
 
 }
