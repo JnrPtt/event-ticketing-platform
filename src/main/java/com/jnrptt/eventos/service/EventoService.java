@@ -1,6 +1,7 @@
 package com.jnrptt.eventos.service;
 
 import com.jnrptt.eventos.dto.EventoRequest;
+import com.jnrptt.eventos.exception.EventoNotFoundException;
 import com.jnrptt.eventos.model.Evento;
 import com.jnrptt.eventos.model.TipoEntrada;
 import com.jnrptt.eventos.model.TiposEntrada;
@@ -32,7 +33,7 @@ public class EventoService {
     @Transactional(readOnly = true)
     public Evento getEventoById(Long id) {
         return eventoRepository.findWithTipoEntradaById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Evento no encontrado"));
+                .orElseThrow(() -> new EventoNotFoundException(id));
     }
 
     @Transactional(readOnly = true)
@@ -43,7 +44,7 @@ public class EventoService {
     @Transactional
     public void deleteEventoById(Long id) {
         if (!eventoRepository.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Evento no encontrado");
+            throw new EventoNotFoundException(id);
         }
         eventoRepository.deleteById(id);
     }
