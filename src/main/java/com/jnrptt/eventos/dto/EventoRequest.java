@@ -34,7 +34,7 @@ public record EventoRequest(
                         null,
                         nombre,
                         descripcion,
-                        fecha.toString(),
+                        fecha,
                         ciudad,
                         lugar,
                         new ArrayList<>(tipoEntrada.stream()

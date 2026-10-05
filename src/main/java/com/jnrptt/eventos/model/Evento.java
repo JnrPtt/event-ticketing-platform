@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,7 +28,7 @@ public class Evento {
     private String descripcion;
 
     @Column(name = "fecha", nullable = false)
-    private String fecha;
+    private LocalDate fecha;
 
     @Column(name = "ciudad", nullable = false)
     private String ciudad;
