@@ -5,6 +5,8 @@ import com.jnrptt.eventos.dto.TipoEntradaRequest;
 import com.jnrptt.eventos.model.TiposEntrada;
 import com.jnrptt.eventos.repository.EventoRepository;
 import com.jnrptt.eventos.repository.TipoEntradaRepository;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,6 +30,12 @@ class EventoServiceIntegrationTests {
 
     @Autowired
     private TipoEntradaRepository tipoEntradaRepository;
+
+    @BeforeEach
+    @AfterEach
+    void limpiaEventos() {
+        eventoRepository.deleteAll();
+    }
 
     @Test
     void creaActualizaYEliminaLasEntradasJuntoConElEvento() {
@@ -75,6 +83,26 @@ class EventoServiceIntegrationTests {
         )))).isInstanceOf(ResponseStatusException.class);
 
         eventoService.deleteEventoById(creado.getId());
+    }
+
+    @Test
+    void filtraEventosPorCiudadYFecha(){
+        eventoService.createEvento(new EventoRequest("Concierto Rock", "Concierto de rock en vivo",
+                LocalDate.of(2026, 12, 31), "Sevilla", "Cartuja",
+                List.of(entrada(TiposEntrada.GENERAL, "40.00", 200))));
+
+        eventoService.createEvento(new EventoRequest("Festival de Jazz", "Festival de jazz al aire libre",
+                LocalDate.of(2026, 12, 31), "Barcelona", "Parc del Fòrum",
+                List.of(entrada(TiposEntrada.VIP, "90.00", 50))));
+
+        eventoService.createEvento(new EventoRequest("Obra de Teatro", "Comedia clásica en dos actos",
+                LocalDate.of(2026, 10, 24), "Sevilla", "Teatro Lope de Vega",
+                List.of(entrada(TiposEntrada.GENERAL, "25.00", 150))));
+
+        assertThat(eventoService.getAllEventos(null, null)).hasSize(3);
+        assertThat(eventoService.getAllEventos("sevilla", null)).hasSize(2);
+        assertThat(eventoService.getAllEventos(null, LocalDate.of(2026, 12, 31))).hasSize(2);
+        assertThat(eventoService.getAllEventos("sevilla", LocalDate.of(2026, 12, 31))).hasSize(1);
     }
 
     private EventoRequest evento(String nombre, List<TipoEntradaRequest> entradas) {

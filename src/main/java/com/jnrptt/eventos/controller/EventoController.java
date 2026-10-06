@@ -4,6 +4,7 @@ import com.jnrptt.eventos.dto.EventoRequest;
 import com.jnrptt.eventos.dto.EventoResponse;
 import com.jnrptt.eventos.service.EventoService;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -13,8 +14,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -32,8 +35,10 @@ public class EventoController {
     }
 
     @GetMapping
-    public List<EventoResponse> getAllEventos() {
-        return eventoService.getAllEventos().stream().map(EventoResponse::from).toList();
+    public List<EventoResponse> getAllEventos(
+            @RequestParam(required = false) String ciudad,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fecha) {
+        return eventoService.getAllEventos(ciudad, fecha).stream().map(EventoResponse::from).toList();
     }
 
     @PostMapping

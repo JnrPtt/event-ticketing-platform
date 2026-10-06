@@ -6,12 +6,15 @@ import com.jnrptt.eventos.model.Evento;
 import com.jnrptt.eventos.model.TipoEntrada;
 import com.jnrptt.eventos.model.TiposEntrada;
 import com.jnrptt.eventos.repository.EventoRepository;
+import com.jnrptt.eventos.repository.EventoSpecifications;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -37,8 +40,10 @@ public class EventoService {
     }
 
     @Transactional(readOnly = true)
-    public List<Evento> getAllEventos() {
-        return eventoRepository.findAll();
+    public List<Evento> getAllEventos(String ciudad, LocalDate fecha) {
+        return eventoRepository.findAll(Specification.allOf(
+                EventoSpecifications.porCiudad(ciudad),
+                EventoSpecifications.porFecha(fecha)));
     }
 
     @Transactional
