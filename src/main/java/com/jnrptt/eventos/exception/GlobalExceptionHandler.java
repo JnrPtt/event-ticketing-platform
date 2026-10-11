@@ -1,8 +1,12 @@
 package com.jnrptt.eventos.exception;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -25,6 +29,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AforoInsuficienteException.class)
     public ResponseEntity<String> handleAforoInsuficienteException(AforoInsuficienteException exception) {
         return ResponseEntity.status(409).body(exception.getMessage());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<String> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
+        String message = exception.getBindingResult().getFieldErrors().stream()
+                .map(FieldError::getDefaultMessage)
+                .collect(Collectors.joining(", "));
+        return ResponseEntity.status(400).body(message);
     }
 
 }
