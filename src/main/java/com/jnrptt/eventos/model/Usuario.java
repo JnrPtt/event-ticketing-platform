@@ -23,4 +23,11 @@ public class Usuario {
     @Column(name = "email", nullable = false, unique = true)
     private String email;
 
+    @Column(name = "password", nullable = false)
+    private String password;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rol", nullable = false)
+    private Rol rol;
+
 }

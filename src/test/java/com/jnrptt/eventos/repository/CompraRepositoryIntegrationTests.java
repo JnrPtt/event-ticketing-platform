@@ -3,6 +3,7 @@ package com.jnrptt.eventos.repository;
 import com.jnrptt.eventos.model.Compra;
 import com.jnrptt.eventos.model.EstadoCompra;
 import com.jnrptt.eventos.model.Evento;
+import com.jnrptt.eventos.model.Rol;
 import com.jnrptt.eventos.model.TipoEntrada;
 import com.jnrptt.eventos.model.TiposEntrada;
 import com.jnrptt.eventos.model.Usuario;
@@ -44,7 +45,7 @@ class CompraRepositoryIntegrationTests {
 
     @Test
     void guardaUnaCompraPendienteYLaRecuperaPorId() {
-        var usuario = usuarioRepository.save(new Usuario(null, "Ana", "ana@example.com"));
+        var usuario = usuarioRepository.save(new Usuario(null, "Ana", "ana@example.com", "hash", Rol.USUARIO));
         var tipoEntrada = tipoEntradaRepository.save(tipoEntrada(eventoRepository.save(evento())));
 
         var guardada = compraRepository.save(new Compra(

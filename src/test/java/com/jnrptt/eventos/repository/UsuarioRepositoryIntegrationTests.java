@@ -1,5 +1,6 @@
 package com.jnrptt.eventos.repository;
 
+import com.jnrptt.eventos.model.Rol;
 import com.jnrptt.eventos.model.Usuario;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,6 @@ class UsuarioRepositoryIntegrationTests {
     }
 
     private Usuario usuario(String nombre, String email) {
-        return new Usuario(null, nombre, email);
+        return new Usuario(null, nombre, email, "hash", Rol.USUARIO);
     }
 }

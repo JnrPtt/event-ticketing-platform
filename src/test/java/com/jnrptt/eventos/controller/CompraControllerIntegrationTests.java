@@ -1,6 +1,7 @@
 package com.jnrptt.eventos.controller;
 
 import com.jnrptt.eventos.model.Evento;
+import com.jnrptt.eventos.model.Rol;
 import com.jnrptt.eventos.model.TipoEntrada;
 import com.jnrptt.eventos.model.TiposEntrada;
 import com.jnrptt.eventos.model.Usuario;
@@ -122,7 +123,7 @@ public class CompraControllerIntegrationTests {
     }
 
     private Escenario creaEscenario() {
-        var usuario = usuarioRepository.save(new Usuario(null, "Ana", "ana@example.com"));
+        var usuario = usuarioRepository.save(new Usuario(null, "Ana", "ana@example.com", "hash", Rol.USUARIO));
         var evento = eventoRepository.save(new Evento(null, "Concierto", "Concierto de prueba",
                 LocalDate.now().plusDays(30), "Madrid", "WiZink Center", new ArrayList<>()));
         var tipoEntrada = tipoEntradaRepository.save(new TipoEntrada(

@@ -1,5 +1,6 @@
 package com.jnrptt.eventos.dto;
 
+import com.jnrptt.eventos.model.Rol;
 import com.jnrptt.eventos.model.Usuario;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -12,7 +13,7 @@ public record UsuarioRequest(
         @Email(message = "El email no tiene un formato válido")
         String email
 ) {
-    public Usuario toUsuario() {
-        return new Usuario(null, nombre, email);
+    public Usuario toUsuario(String passwordHash) {
+        return new Usuario(null, nombre, email, passwordHash, Rol.USUARIO);
     }
 }
