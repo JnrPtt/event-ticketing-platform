@@ -2,6 +2,7 @@ package com.jnrptt.eventos.service;
 
 import com.jnrptt.eventos.dto.CompraRequest;
 import com.jnrptt.eventos.exception.AforoInsuficienteException;
+import com.jnrptt.eventos.exception.TipoEntradaNotFoundException;
 import com.jnrptt.eventos.exception.UsuarioNotFoundException;
 import com.jnrptt.eventos.model.EstadoCompra;
 import com.jnrptt.eventos.model.Evento;
@@ -103,6 +104,18 @@ class CompraServiceIntegrationTests {
         assertThatThrownBy(() -> compraService.comprar(new CompraRequest(
                 999999L, escenario.tipoEntrada().getId(), 3)))
                 .isInstanceOf(UsuarioNotFoundException.class);
+
+        assertThat(compraRepository.count()).isZero();
+        assertThat(aforoDisponible(escenario)).isEqualTo(AFORO);
+    }
+
+    @Test
+    void tipoEntradaInexistenteLanzaExcepcionYNoModificaNada() {
+        var escenario = creaEscenario();
+
+        assertThatThrownBy(() -> compraService.comprar(new CompraRequest(
+                escenario.usuario().getId(), 999999L, 3)))
+                .isInstanceOf(TipoEntradaNotFoundException.class);
 
         assertThat(compraRepository.count()).isZero();
         assertThat(aforoDisponible(escenario)).isEqualTo(AFORO);
