@@ -26,7 +26,10 @@ public class CompraService {
     @Transactional
     public CompraResponse comprar(CompraRequest compraRequest) {
         Usuario usuario = usuarioService.obtenerPorId(compraRequest.usuarioId());
-        TipoEntrada tipoEntrada = tipoEntradaRepository.findById(compraRequest.tipoEntradaId())
+        // Bloqueo pesimista (SELECT ... FOR UPDATE): las compras de un mismo tipo de entrada
+        // compiten mucho por la misma fila, y con bloqueo optimista la mayoría fallarían y habría
+        // que reintentarlas. Así se serializan en la BD y cada una ve el aforo ya descontado.
+        TipoEntrada tipoEntrada = tipoEntradaRepository.findByIdForUpdate(compraRequest.tipoEntradaId())
                 .orElseThrow(() -> new TipoEntradaNotFoundException(compraRequest.tipoEntradaId()));
 
         int cantidad = compraRequest.cantidad();

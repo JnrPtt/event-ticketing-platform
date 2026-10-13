@@ -4,6 +4,7 @@ import com.jnrptt.eventos.dto.CompraRequest;
 import com.jnrptt.eventos.exception.AforoInsuficienteException;
 import com.jnrptt.eventos.exception.TipoEntradaNotFoundException;
 import com.jnrptt.eventos.exception.UsuarioNotFoundException;
+import com.jnrptt.eventos.model.Compra;
 import com.jnrptt.eventos.model.EstadoCompra;
 import com.jnrptt.eventos.model.Evento;
 import com.jnrptt.eventos.model.TipoEntrada;
@@ -22,6 +23,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -119,6 +127,58 @@ class CompraServiceIntegrationTests {
 
         assertThat(compraRepository.count()).isZero();
         assertThat(aforoDisponible(escenario)).isEqualTo(AFORO);
+    }
+
+    @Test
+    void comprasConcurrentesNoVendenMasQueElAforo() throws Exception {
+        var escenario = creaEscenario();
+        int hilos = 20;
+        var request = new CompraRequest(escenario.usuario().getId(), escenario.tipoEntrada().getId(), 1);
+
+        ExecutorService executor = Executors.newFixedThreadPool(hilos);
+        CountDownLatch salida = new CountDownLatch(1);
+        List<Future<Boolean>> resultados = new ArrayList<>();
+        for (int i = 0; i < hilos; i++) {
+            resultados.add(executor.submit(() -> {
+                salida.await();
+                try {
+                    compraService.comprar(request);
+                    return true;
+                } catch (AforoInsuficienteException e) {
+                    return false;
+                }
+            }));
+        }
+
+        salida.countDown();
+        executor.shutdown();
+        assertThat(executor.awaitTermination(30, TimeUnit.SECONDS))
+                .as("Las compras concurrentes no terminaron a tiempo")
+                .isTrue();
+
+        int exitos = 0;
+        int rechazos = 0;
+        for (Future<Boolean> resultado : resultados) {
+            try {
+                if (resultado.get()) {
+                    exitos++;
+                } else {
+                    rechazos++;
+                }
+            } catch (ExecutionException e) {
+                throw new AssertionError("Una compra lanzó una excepción inesperada", e.getCause());
+            }
+        }
+
+        int cantidadComprada = compraRepository.findAll().stream()
+                .mapToInt(Compra::getCantidad)
+                .sum();
+
+        assertThat(exitos).isEqualTo(AFORO);
+        assertThat(rechazos).isEqualTo(hilos - AFORO);
+        assertThat(aforoDisponible(escenario)).isZero();
+        assertThat(compraRepository.count()).isEqualTo(AFORO);
+        assertThat(aforoDisponible(escenario) + cantidadComprada).isEqualTo(AFORO);
     }
 
     private int aforoDisponible(Escenario escenario) {
