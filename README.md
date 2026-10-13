@@ -22,9 +22,11 @@ API REST para gestionar eventos, sus tipos de entrada (GENERAL / VIP) con contro
 |---|---|---|
 | CRUD de eventos con tipos de entrada | ✅ | Filtros opcionales por `ciudad` (sin distinguir mayúsculas) y `fecha` |
 | Reglas de negocio al editar eventos | ✅ | No se puede reducir el aforo por debajo de lo vendido, ni eliminar un tipo con ventas, ni repetir tipos |
-| Usuarios y compras | 🚧 | Entidades, DTOs y repositorios listos; aún sin endpoints |
+| Compra de entradas | ✅ | `POST /compras` con control de aforo y bloqueo pesimista frente a compras concurrentes |
+| Usuarios | 🚧 | Entidad y repositorio listos; aún sin endpoint de registro |
+| Estados de compra | 🚧 | Las compras se crean `CONFIRMADA`; `PENDIENTE` (pago) y `CANCELADA` (devolución de aforo) pendientes |
 | Kafka | 🚧 | Dependencia y broker configurados; aún sin productores/consumidores |
-| Seguridad | 🚧 | HTTP Basic. `/eventos/**`, Swagger y `/actuator/health`/`info` son públicos |
+| Seguridad | 🚧 | HTTP Basic (`admin`/`admin` por defecto). `/eventos/**`, Swagger y `/actuator/health`/`info` son públicos; `/compras` requiere autenticación |
 
 ## Arranque rápido
 
@@ -94,6 +96,39 @@ Ejemplo de filtro:
 GET /eventos?ciudad=Madrid&fecha=2026-12-01
 ```
 
+### Compras
+
+Requiere autenticación HTTP Basic (credenciales configurables con `SPRING_SECURITY_USER_NAME` / `SPRING_SECURITY_USER_PASSWORD`).
+
+| Método | Ruta | Descripción | Respuesta |
+|---|---|---|---|
+| `POST` | `/compras` | Compra entradas de un tipo y descuenta el aforo | `201` / `400` / `401` / `404` / `409` |
+
+Ejemplo de petición:
+
+```json
+{ "usuarioId": 1, "tipoEntradaId": 1, "cantidad": 3 }
+```
+
+Ejemplo de respuesta (`201`):
+
+```json
+{
+  "id": 1,
+  "usuarioId": 1,
+  "eventoId": 1,
+  "tipoEntradaId": 1,
+  "tipoEntrada": "GENERAL",
+  "cantidad": 3,
+  "precioUnitario": 35.00,
+  "total": 105.00,
+  "estado": "CONFIRMADA",
+  "fecha": "2026-10-13T12:00:00"
+}
+```
+
+El precio unitario se copia del tipo de entrada en el momento de la compra, así que un cambio de precio posterior no altera las compras existentes.
+
 ### Errores
 
 | Código | Cuándo |
@@ -139,6 +174,20 @@ erDiagram
     }
 ```
 
+## Concurrencia en las compras
+
+**Problema.** La versión inicial de `CompraService.comprar` leía el aforo disponible, comprobaba que había suficiente y lo descontaba. Con varias compras simultáneas del mismo tipo de entrada, todas leían el mismo aforo antes de que ninguna confirmara, todas pasaban la comprobación y cada una sobrescribía el valor de la anterior (*lost update*). Resultado: se vendían más entradas que el aforo y el aforo disponible no cuadraba con las compras guardadas.
+
+**Cómo se demuestra.** `CompraServiceIntegrationTests.comprasConcurrentesNoVendenMasQueElAforo` lanza 20 compras de 1 entrada a la vez (sincronizadas con un `CountDownLatch`) sobre un tipo con aforo 10, y comprueba que:
+
+- exactamente 10 compras tienen éxito y 10 se rechazan con `AforoInsuficienteException` (`409`);
+- el aforo disponible queda en 0 y hay 10 compras guardadas;
+- se cumple el invariante `aforo disponible + entradas compradas = aforo total`.
+
+Con la versión inicial el test falla; con el bloqueo pasa.
+
+**Solución.** El tipo de entrada se lee con bloqueo pesimista (`@Lock(LockModeType.PESSIMISTIC_WRITE)` en `TipoEntradaRepository.findByIdForUpdate`, que genera un `SELECT ... FOR UPDATE`). Las compras del mismo tipo de entrada esperan su turno en la base de datos y cada una ve el aforo ya descontado por la anterior. Se eligió el bloqueo pesimista en lugar del optimista (`@Version`) porque la venta de entradas tiene mucha contención sobre la misma fila: con el optimista, la mayoría de compras fallarían y habría que reintentarlas.
+
 ## Estructura del proyecto
 
 ```
@@ -162,7 +211,7 @@ Tests de integración con `@SpringBootTest` sobre H2 en memoria.
 
 ## Próximos pasos (tentativo)
 
-- [ ] Endpoints de usuarios
-- [ ] Endpoints de compras con control de aforo
+- [x] Endpoint de compras con control de aforo y concurrencia
+- [ ] Autenticación con JWT, registro/login y roles (usuario / organizador); el `usuarioId` de la compra saldrá del token
 - [ ] Publicación de eventos de compra en Kafka
-- [ ] Autenticación y autorización reales
+- [ ] Estados de compra `PENDIENTE` (pago simulado) y `CANCELADA` (devuelve aforo)
