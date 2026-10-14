@@ -22,9 +22,9 @@ public class TokenService {
     private Duration expiration;
     private final JwtEncoder jwtEncoder;
 
-    private Instant ahora = Instant.now();
-
     public String generar(Usuario usuario) {
+        Instant ahora = Instant.now();
+
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer("eventos")
                 .issuedAt(ahora)
