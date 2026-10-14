@@ -6,6 +6,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.Locale;
+
 @Entity
 @Table(name = "usuarios")
 @Setter
@@ -29,5 +31,15 @@ public class Usuario {
     @Enumerated(EnumType.STRING)
     @Column(name = "rol", nullable = false)
     private Rol rol;
+
+    public static String normalizarEmail(String email) {
+        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    @PrePersist
+    @PreUpdate
+    void normalizaEmail() {
+        email = normalizarEmail(email);
+    }
 
 }

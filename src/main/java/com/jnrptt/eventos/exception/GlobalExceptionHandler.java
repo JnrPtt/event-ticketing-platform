@@ -31,6 +31,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(409).body(exception.getMessage());
     }
 
+    @ExceptionHandler(EmailYaRegistradoException.class)
+    public ResponseEntity<String> handleEmailYaRegistradoException(EmailYaRegistradoException exception) {
+        return ResponseEntity.status(409).body(exception.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<String> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
         String message = exception.getBindingResult().getFieldErrors().stream()

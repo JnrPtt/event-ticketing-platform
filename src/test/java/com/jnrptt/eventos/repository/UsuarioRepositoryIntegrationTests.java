@@ -45,6 +45,15 @@ class UsuarioRepositoryIntegrationTests {
         assertThat(usuarioRepository.count()).isEqualTo(1);
     }
 
+    @Test
+    void normalizaElEmailAlGuardar() {
+        usuarioRepository.save(usuario("Ana", "  Ana@Example.COM "));
+
+        assertThat(usuarioRepository.findByEmail("ana@example.com")).isPresent();
+        assertThatThrownBy(() -> usuarioRepository.saveAndFlush(usuario("Otro", "ANA@example.com")))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     private Usuario usuario(String nombre, String email) {
         return new Usuario(null, nombre, email, "hash", Rol.USUARIO);
     }
