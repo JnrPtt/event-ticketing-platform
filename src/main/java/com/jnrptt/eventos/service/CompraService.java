@@ -24,8 +24,8 @@ public class CompraService {
     private final TipoEntradaRepository tipoEntradaRepository;
 
     @Transactional
-    public CompraResponse comprar(CompraRequest compraRequest) {
-        Usuario usuario = usuarioService.obtenerPorId(compraRequest.usuarioId());
+    public CompraResponse comprar(Long usuarioId, CompraRequest compraRequest) {
+        Usuario usuario = usuarioService.obtenerPorId(usuarioId);
         // Bloqueo pesimista (SELECT ... FOR UPDATE): las compras de un mismo tipo de entrada
         // compiten mucho por la misma fila, y con bloqueo optimista la mayoría fallarían y habría
         // que reintentarlas. Así se serializan en la BD y cada una ve el aforo ya descontado.

@@ -103,10 +103,10 @@ class SeguridadIntegrationTests {
     @Test
     void registroLoginYCompraConTokenRealDevuelve201() throws Exception {
         var tipoEntrada = creaTipoEntrada();
-        Long usuarioId = registrar("ana@example.com");
+        registrar("Ana", "ana@example.com");
         String token = login("ana@example.com");
 
-        comprar(usuarioId, tipoEntrada.getId(), "Bearer " + token)
+        comprar(tipoEntrada.getId(), "Bearer " + token)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.estado").value("CONFIRMADA"));
 
@@ -130,7 +130,7 @@ class SeguridadIntegrationTests {
 
     @Test
     void tokenRealDeUsuarioAlCrearEventoDevuelve403() throws Exception {
-        registrar("ana@example.com");
+        registrar("Ana", "ana@example.com");
         String token = login("ana@example.com");
 
         mockMvc.perform(peticionCrearEvento()
@@ -143,13 +143,32 @@ class SeguridadIntegrationTests {
     @Test
     void tokenManipuladoDevuelve401() throws Exception {
         var tipoEntrada = creaTipoEntrada();
-        Long usuarioId = registrar("ana@example.com");
+        registrar("Ana", "ana@example.com");
         String token = login("ana@example.com");
 
-        comprar(usuarioId, tipoEntrada.getId(), "Bearer " + manipula(token))
+        comprar(tipoEntrada.getId(), "Bearer " + manipula(token))
                 .andExpect(status().isUnauthorized());
 
         assertThat(compraRepository.count()).isZero();
+    }
+
+    @Test
+    void usuarioIdEnElBodyNoPermiteComprarEnNombreDeOtro() throws Exception {
+        // El comprador sale siempre del token. Jackson ignora "usuarioId" porque CompraRequest
+        // ya no lo tiene: el campo de más no da error, simplemente no se usa.
+        var tipoEntrada = creaTipoEntrada();
+        Long anaId = registrar("Ana", "ana@example.com");
+        Long beaId = registrar("Bea", "bea@example.com");
+        String tokenAna = login("ana@example.com");
+        String body = """
+                {"usuarioId": %d, "tipoEntradaId": %d, "cantidad": 2}
+                """.formatted(beaId, tipoEntrada.getId());
+
+        enviarCompra(body, "Bearer " + tokenAna)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.usuarioId").value(anaId));
+
+        assertThat(compraRepository.count()).isEqualTo(1);
     }
 
     // Cambia el primer carácter de la firma. No se toca el último porque en base64url
@@ -161,20 +180,24 @@ class SeguridadIntegrationTests {
         return token.substring(0, inicioFirma) + cambiado + token.substring(inicioFirma + 1);
     }
 
-    private ResultActions comprar(Long usuarioId, Long tipoEntradaId, String authorization) throws Exception {
+    private ResultActions comprar(Long tipoEntradaId, String authorization) throws Exception {
         String body = """
-                {"usuarioId": %d, "tipoEntradaId": %d, "cantidad": 2}
-                """.formatted(usuarioId, tipoEntradaId);
+                {"tipoEntradaId": %d, "cantidad": 2}
+                """.formatted(tipoEntradaId);
+        return enviarCompra(body, authorization);
+    }
+
+    private ResultActions enviarCompra(String body, String authorization) throws Exception {
         return mockMvc.perform(post("/compras")
                 .header(HttpHeaders.AUTHORIZATION, authorization)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body));
     }
 
-    private Long registrar(String email) throws Exception {
+    private Long registrar(String nombre, String email) throws Exception {
         String body = """
-                {"nombre": "Ana", "email": "%s", "password": "%s"}
-                """.formatted(email, PASSWORD);
+                {"nombre": "%s", "email": "%s", "password": "%s"}
+                """.formatted(nombre, email, PASSWORD);
         String respuesta = mockMvc.perform(post("/auth/registro")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))

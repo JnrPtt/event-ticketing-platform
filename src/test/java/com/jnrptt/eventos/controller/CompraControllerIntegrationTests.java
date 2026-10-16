@@ -74,7 +74,7 @@ public class CompraControllerIntegrationTests {
     void sinAutenticarDevuelve401YNoGuardaNada() throws Exception {
         var escenario = creaEscenario();
 
-        comprarSinToken(escenario.usuario().getId(), escenario.tipoEntrada().getId(), 3)
+        comprarSinToken(escenario.tipoEntrada().getId(), 3)
                 .andExpect(status().isUnauthorized());
 
         assertThat(compraRepository.count()).isZero();
@@ -110,18 +110,21 @@ public class CompraControllerIntegrationTests {
         assertThat(compraRepository.count()).isZero();
     }
 
+    // El controlador saca el id del usuario del subject del token. jwt() sin más pondría
+    // sub = "user" y Long.valueOf("user") acabaría en un 500, así que se fija explícitamente.
     private ResultActions comprar(Long usuarioId, Long tipoEntradaId, int cantidad) throws Exception {
-        return mockMvc.perform(peticionCompra(usuarioId, tipoEntradaId, cantidad).with(jwt()));
+        return mockMvc.perform(peticionCompra(tipoEntradaId, cantidad)
+                .with(jwt().jwt(j -> j.subject(String.valueOf(usuarioId)))));
     }
 
-    private ResultActions comprarSinToken(Long usuarioId, Long tipoEntradaId, int cantidad) throws Exception {
-        return mockMvc.perform(peticionCompra(usuarioId, tipoEntradaId, cantidad));
+    private ResultActions comprarSinToken(Long tipoEntradaId, int cantidad) throws Exception {
+        return mockMvc.perform(peticionCompra(tipoEntradaId, cantidad));
     }
 
-    private MockHttpServletRequestBuilder peticionCompra(Long usuarioId, Long tipoEntradaId, int cantidad) {
+    private MockHttpServletRequestBuilder peticionCompra(Long tipoEntradaId, int cantidad) {
         String body = """
-                {"usuarioId": %d, "tipoEntradaId": %d, "cantidad": %d}
-                """.formatted(usuarioId, tipoEntradaId, cantidad);
+                {"tipoEntradaId": %d, "cantidad": %d}
+                """.formatted(tipoEntradaId, cantidad);
         return post("/compras")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body);

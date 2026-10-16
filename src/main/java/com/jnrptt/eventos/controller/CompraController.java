@@ -6,6 +6,8 @@ import com.jnrptt.eventos.service.CompraService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,8 +23,11 @@ public class CompraController {
     }
 
     @PostMapping
-    public ResponseEntity<CompraResponse> createCompra(@Valid @RequestBody CompraRequest compraRequest) {
-        CompraResponse response = compraService.comprar(compraRequest);
+    public ResponseEntity<CompraResponse> createCompra(@AuthenticationPrincipal Jwt jwt,
+                                                       @Valid @RequestBody CompraRequest compraRequest) {
+        // El usuario sale del token, nunca del body: así nadie puede comprar en nombre de otro.
+        Long usuarioId = Long.valueOf(jwt.getSubject());
+        CompraResponse response = compraService.comprar(usuarioId, compraRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

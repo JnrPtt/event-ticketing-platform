@@ -67,8 +67,8 @@ class CompraServiceIntegrationTests {
     void compraCorrectaDescuentaAforoYGuardaLaCompra() {
         var escenario = creaEscenario();
 
-        var respuesta = compraService.comprar(new CompraRequest(
-                escenario.usuario().getId(), escenario.tipoEntrada().getId(), 3));
+        var respuesta = compraService.comprar(escenario.usuario().getId(), new CompraRequest(
+                escenario.tipoEntrada().getId(), 3));
 
         assertThat(respuesta.id()).isNotNull();
         assertThat(respuesta.estado()).isEqualTo(EstadoCompra.CONFIRMADA);
@@ -87,8 +87,8 @@ class CompraServiceIntegrationTests {
     void aforoInsuficienteLanzaExcepcionYNoModificaNada() {
         var escenario = creaEscenario();
 
-        assertThatThrownBy(() -> compraService.comprar(new CompraRequest(
-                escenario.usuario().getId(), escenario.tipoEntrada().getId(), AFORO + 1)))
+        assertThatThrownBy(() -> compraService.comprar(escenario.usuario().getId(), new CompraRequest(
+                escenario.tipoEntrada().getId(), AFORO + 1)))
                 .isInstanceOf(AforoInsuficienteException.class);
 
         assertThat(aforoDisponible(escenario)).isEqualTo(AFORO);
@@ -99,8 +99,8 @@ class CompraServiceIntegrationTests {
     void comprarExactamenteElAforoDisponibleLoDejaACero() {
         var escenario = creaEscenario();
 
-        compraService.comprar(new CompraRequest(
-                escenario.usuario().getId(), escenario.tipoEntrada().getId(), AFORO));
+        compraService.comprar(escenario.usuario().getId(), new CompraRequest(
+                escenario.tipoEntrada().getId(), AFORO));
 
         assertThat(aforoDisponible(escenario)).isZero();
         assertThat(compraRepository.count()).isEqualTo(1);
@@ -110,8 +110,8 @@ class CompraServiceIntegrationTests {
     void usuarioInexistenteLanzaExcepcionYNoModificaNada() {
         var escenario = creaEscenario();
 
-        assertThatThrownBy(() -> compraService.comprar(new CompraRequest(
-                999999L, escenario.tipoEntrada().getId(), 3)))
+        assertThatThrownBy(() -> compraService.comprar(999999L, new CompraRequest(
+                escenario.tipoEntrada().getId(), 3)))
                 .isInstanceOf(UsuarioNotFoundException.class);
 
         assertThat(compraRepository.count()).isZero();
@@ -122,8 +122,8 @@ class CompraServiceIntegrationTests {
     void tipoEntradaInexistenteLanzaExcepcionYNoModificaNada() {
         var escenario = creaEscenario();
 
-        assertThatThrownBy(() -> compraService.comprar(new CompraRequest(
-                escenario.usuario().getId(), 999999L, 3)))
+        assertThatThrownBy(() -> compraService.comprar(escenario.usuario().getId(), new CompraRequest(
+                999999L, 3)))
                 .isInstanceOf(TipoEntradaNotFoundException.class);
 
         assertThat(compraRepository.count()).isZero();
@@ -134,7 +134,8 @@ class CompraServiceIntegrationTests {
     void comprasConcurrentesNoVendenMasQueElAforo() throws Exception {
         var escenario = creaEscenario();
         int hilos = 20;
-        var request = new CompraRequest(escenario.usuario().getId(), escenario.tipoEntrada().getId(), 1);
+        Long usuarioId = escenario.usuario().getId();
+        var request = new CompraRequest(escenario.tipoEntrada().getId(), 1);
 
         ExecutorService executor = Executors.newFixedThreadPool(hilos);
         CountDownLatch salida = new CountDownLatch(1);
@@ -143,7 +144,7 @@ class CompraServiceIntegrationTests {
             resultados.add(executor.submit(() -> {
                 salida.await();
                 try {
-                    compraService.comprar(request);
+                    compraService.comprar(usuarioId, request);
                     return true;
                 } catch (AforoInsuficienteException e) {
                     return false;
