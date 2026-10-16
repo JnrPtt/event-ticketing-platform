@@ -16,15 +16,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -59,7 +60,6 @@ public class CompraControllerIntegrationTests {
     }
 
     @Test
-    @WithMockUser
     void compraCorrectaDevuelve201() throws Exception {
         var escenario = creaEscenario();
 
@@ -74,14 +74,13 @@ public class CompraControllerIntegrationTests {
     void sinAutenticarDevuelve401YNoGuardaNada() throws Exception {
         var escenario = creaEscenario();
 
-        comprar(escenario.usuario().getId(), escenario.tipoEntrada().getId(), 3)
+        comprarSinToken(escenario.usuario().getId(), escenario.tipoEntrada().getId(), 3)
                 .andExpect(status().isUnauthorized());
 
         assertThat(compraRepository.count()).isZero();
     }
 
     @Test
-    @WithMockUser
     void cantidadCeroDevuelve400() throws Exception {
         var escenario = creaEscenario();
 
@@ -92,7 +91,6 @@ public class CompraControllerIntegrationTests {
     }
 
     @Test
-    @WithMockUser
     void usuarioInexistenteDevuelve404() throws Exception {
         var escenario = creaEscenario();
 
@@ -103,7 +101,6 @@ public class CompraControllerIntegrationTests {
     }
 
     @Test
-    @WithMockUser
     void aforoInsuficienteDevuelve409() throws Exception {
         var escenario = creaEscenario();
 
@@ -114,12 +111,20 @@ public class CompraControllerIntegrationTests {
     }
 
     private ResultActions comprar(Long usuarioId, Long tipoEntradaId, int cantidad) throws Exception {
+        return mockMvc.perform(peticionCompra(usuarioId, tipoEntradaId, cantidad).with(jwt()));
+    }
+
+    private ResultActions comprarSinToken(Long usuarioId, Long tipoEntradaId, int cantidad) throws Exception {
+        return mockMvc.perform(peticionCompra(usuarioId, tipoEntradaId, cantidad));
+    }
+
+    private MockHttpServletRequestBuilder peticionCompra(Long usuarioId, Long tipoEntradaId, int cantidad) {
         String body = """
                 {"usuarioId": %d, "tipoEntradaId": %d, "cantidad": %d}
                 """.formatted(usuarioId, tipoEntradaId, cantidad);
-        return mockMvc.perform(post("/compras")
+        return post("/compras")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(body));
+                .content(body);
     }
 
     private Escenario creaEscenario() {
