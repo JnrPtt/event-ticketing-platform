@@ -1,6 +1,8 @@
 package com.jnrptt.eventos.service;
 
+import com.jnrptt.eventos.dto.LoginRequest;
 import com.jnrptt.eventos.dto.RegistroRequest;
+import com.jnrptt.eventos.exception.CredencialesInvalidasException;
 import com.jnrptt.eventos.exception.EmailYaRegistradoException;
 import com.jnrptt.eventos.exception.UsuarioNotFoundException;
 import com.jnrptt.eventos.model.Usuario;
@@ -37,5 +39,16 @@ public class UsuarioService {
         } catch (DataIntegrityViolationException e) {
             throw new EmailYaRegistradoException(email);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Usuario autenticar(LoginRequest loginRequest) {
+        String email = Usuario.normalizarEmail(loginRequest.email());
+        Usuario usuario = usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new CredencialesInvalidasException());
+        if (!passwordEncoder.matches(loginRequest.password(), usuario.getPassword())) {
+            throw new CredencialesInvalidasException();
+        }
+        return usuario;
     }
 }

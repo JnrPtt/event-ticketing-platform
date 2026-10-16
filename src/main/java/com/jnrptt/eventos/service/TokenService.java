@@ -35,4 +35,8 @@ public class TokenService {
         JwsHeader cabecera = JwsHeader.with(MacAlgorithm.HS256).build();
         return jwtEncoder.encode(JwtEncoderParameters.from(cabecera, claims)).getTokenValue();
     }
+
+    public Duration getExpiracion() {
+        return expiration;
+    }
 }

@@ -44,4 +44,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(400).body(message);
     }
 
+    @ExceptionHandler(CredencialesInvalidasException.class)
+    public ResponseEntity<String> handleCredencialesInvalidasException(CredencialesInvalidasException exception) {
+        return ResponseEntity.status(401).body(exception.getMessage());
+    }
 }
