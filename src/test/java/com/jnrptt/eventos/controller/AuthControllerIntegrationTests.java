@@ -3,6 +3,7 @@ package com.jnrptt.eventos.controller;
 import com.jayway.jsonpath.JsonPath;
 import com.jnrptt.eventos.model.Rol;
 import com.jnrptt.eventos.repository.UsuarioRepository;
+import com.jnrptt.eventos.service.UsuarioService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,9 @@ class AuthControllerIntegrationTests {
 
     @Autowired
     private JwtDecoder jwtDecoder;
+
+    @Autowired
+    private UsuarioService usuarioService;
 
     @BeforeEach
     @AfterEach
@@ -145,6 +149,19 @@ class AuthControllerIntegrationTests {
         login("nadie@example.com", PASSWORD)
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().string(bodyPasswordIncorrecto));
+    }
+
+    @Test
+    void loginDelOrganizadorInicialDevuelveUnTokenConRolOrganizador() throws Exception {
+        usuarioService.crearOrganizadorSiNoExiste("Org", "org@example.com", PASSWORD);
+
+        String respuesta = login("org@example.com", PASSWORD)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+
+        String token = JsonPath.read(respuesta, "$.token");
+        assertThat(jwtDecoder.decode(token).getClaimAsStringList("roles")).containsExactly("ORGANIZADOR");
     }
 
     private ResultActions login(String email, String password) throws Exception {

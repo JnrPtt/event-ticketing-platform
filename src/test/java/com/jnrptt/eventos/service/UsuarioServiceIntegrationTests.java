@@ -2,12 +2,15 @@ package com.jnrptt.eventos.service;
 
 import com.jnrptt.eventos.dto.RegistroRequest;
 import com.jnrptt.eventos.exception.EmailYaRegistradoException;
+import com.jnrptt.eventos.model.Rol;
+import com.jnrptt.eventos.model.Usuario;
 import com.jnrptt.eventos.repository.UsuarioRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.util.ArrayList;
@@ -31,6 +34,9 @@ class UsuarioServiceIntegrationTests {
 
     @MockitoSpyBean
     private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     @AfterEach
@@ -88,6 +94,76 @@ class UsuarioServiceIntegrationTests {
 
         assertThat(exitos).isEqualTo(1);
         assertThat(usuarioRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void crearOrganizadorValidoLoGuardaComoOrganizadorConElPasswordEnHash() {
+        boolean creado = usuarioService.crearOrganizadorSiNoExiste("Org", "org@example.com", "secreto123");
+
+        assertThat(creado).isTrue();
+        Usuario guardado = usuarioRepository.findByEmail("org@example.com").orElseThrow();
+        assertThat(guardado.getNombre()).isEqualTo("Org");
+        assertThat(guardado.getRol()).isEqualTo(Rol.ORGANIZADOR);
+        assertThat(guardado.getPassword()).startsWith("{bcrypt}");
+        assertThat(passwordEncoder.matches("secreto123", guardado.getPassword())).isTrue();
+    }
+
+    @Test
+    void crearOrganizadorDosVecesSoloGuardaUno() {
+        usuarioService.crearOrganizadorSiNoExiste("Org", "org@example.com", "secreto123");
+        String hashOriginal = usuarioRepository.findByEmail("org@example.com").orElseThrow().getPassword();
+
+        boolean creado = usuarioService.crearOrganizadorSiNoExiste("Otro", "org@example.com", "otroSecreto");
+
+        assertThat(creado).isFalse();
+        assertThat(usuarioRepository.count()).isEqualTo(1);
+        Usuario guardado = usuarioRepository.findByEmail("org@example.com").orElseThrow();
+        assertThat(guardado.getNombre()).isEqualTo("Org");
+        assertThat(guardado.getPassword()).isEqualTo(hashOriginal);
+    }
+
+    @Test
+    void crearOrganizadorConEmailDeUnUsuarioExistenteNoLoAsciende() {
+        usuarioService.registrar(registro("ana@example.com"));
+
+        boolean creado = usuarioService.crearOrganizadorSiNoExiste("Org", "ana@example.com", "otroSecreto");
+
+        assertThat(creado).isFalse();
+        assertThat(usuarioRepository.count()).isEqualTo(1);
+        Usuario guardado = usuarioRepository.findByEmail("ana@example.com").orElseThrow();
+        assertThat(guardado.getRol()).isEqualTo(Rol.USUARIO);
+        assertThat(passwordEncoder.matches("secreto123", guardado.getPassword())).isTrue();
+    }
+
+    @Test
+    void crearOrganizadorNormalizaElEmail() {
+        usuarioService.crearOrganizadorSiNoExiste("Org", "  Org@Example.COM ", "secreto123");
+
+        assertThat(usuarioRepository.findByEmail("org@example.com")).isPresent();
+
+        boolean creado = usuarioService.crearOrganizadorSiNoExiste("Org", "org@example.com", "secreto123");
+        assertThat(creado).isFalse();
+        assertThat(usuarioRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void crearOrganizadorConPasswordCortoLanzaIllegalStateYNoGuardaNada() {
+        assertThatThrownBy(() -> usuarioService.crearOrganizadorSiNoExiste("Org", "org@example.com", "corto"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageNotContaining("corto");
+
+        assertThat(usuarioRepository.count()).isZero();
+    }
+
+    @Test
+    void crearOrganizadorConPasswordDeMasDe72BytesLanzaIllegalStateYNoGuardaNada() {
+        // 37 caracteres pero 74 bytes en UTF-8.
+        String password = "ñ".repeat(37);
+
+        assertThatThrownBy(() -> usuarioService.crearOrganizadorSiNoExiste("Org", "org@example.com", password))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(usuarioRepository.count()).isZero();
     }
 
     private RegistroRequest registro(String email) {
