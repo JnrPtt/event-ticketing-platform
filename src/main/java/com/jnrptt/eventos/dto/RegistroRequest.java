@@ -2,9 +2,9 @@ package com.jnrptt.eventos.dto;
 
 import com.jnrptt.eventos.model.Rol;
 import com.jnrptt.eventos.model.Usuario;
+import com.jnrptt.eventos.validation.PasswordValido;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 
 public record RegistroRequest(
         @NotBlank(message = "El nombre es obligatorio")
@@ -15,7 +15,7 @@ public record RegistroRequest(
         String email,
 
         @NotBlank(message = "El password es obligatorio")
-        @Size(min = 8, max = 72, message = "El password debe tener entre 8 y 72 caracteres")
+        @PasswordValido
         String password
 ) {
     public RegistroRequest {

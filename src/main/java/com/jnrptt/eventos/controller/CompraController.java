@@ -3,6 +3,7 @@ package com.jnrptt.eventos.controller;
 import com.jnrptt.eventos.dto.CompraRequest;
 import com.jnrptt.eventos.dto.CompraResponse;
 import com.jnrptt.eventos.service.CompraService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/compras")
+@SecurityRequirement(name = "bearerAuth")
 public class CompraController {
     private final CompraService compraService;
 

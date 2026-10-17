@@ -106,6 +106,14 @@ class AuthControllerIntegrationTests {
     }
 
     @Test
+    void passwordDe72CaracteresPeroMasDe72BytesDevuelve400() throws Exception {
+        registrar("ana@example.com", "ñ".repeat(72))
+                .andExpect(status().isBadRequest());
+
+        assertThat(usuarioRepository.count()).isZero();
+    }
+
+    @Test
     void loginCorrectoDevuelve200YUnTokenConElIdDelUsuarioComoSub() throws Exception {
         registrar("ana@example.com", PASSWORD).andExpect(status().isCreated());
         Long id = usuarioRepository.findByEmail("ana@example.com").orElseThrow().getId();

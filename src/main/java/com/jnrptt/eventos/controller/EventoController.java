@@ -3,6 +3,7 @@ package com.jnrptt.eventos.controller;
 import com.jnrptt.eventos.dto.EventoRequest;
 import com.jnrptt.eventos.dto.EventoResponse;
 import com.jnrptt.eventos.service.EventoService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -42,17 +43,20 @@ public class EventoController {
     }
 
     @PostMapping
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<EventoResponse> createEvento(@Valid @RequestBody EventoRequest eventoRequest) {
         EventoResponse response = EventoResponse.from(eventoService.createEvento(eventoRequest));
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PutMapping("/{id}")
+    @SecurityRequirement(name = "bearerAuth")
     public EventoResponse editEvento(@PathVariable Long id, @Valid @RequestBody EventoRequest eventoRequest) {
         return EventoResponse.from(eventoService.editEventoById(id, eventoRequest));
     }
 
     @DeleteMapping("/{id}")
+    @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<Void> deleteEvento(@PathVariable Long id) {
         eventoService.deleteEventoById(id);
         return ResponseEntity.noContent().build();

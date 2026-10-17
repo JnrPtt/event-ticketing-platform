@@ -1,5 +1,6 @@
 package com.jnrptt.eventos.config;
 
+import com.jnrptt.eventos.model.Usuario;
 import com.jnrptt.eventos.service.UsuarioService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -7,11 +8,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-/**
- * El registro siempre crea usuarios con rol USUARIO, así que el primer ORGANIZADOR
- * se crea al arrancar a partir de las variables de entorno ORGANIZADOR_*.
- * Sin ellas no se crea nada. El password nunca se escribe en los logs.
- */
+
 @Slf4j
 @Component
 public class OrganizadorInicial implements ApplicationRunner {
@@ -37,10 +34,11 @@ public class OrganizadorInicial implements ApplicationRunner {
             log.info("ORGANIZADOR_EMAIL u ORGANIZADOR_PASSWORD no definidos: no se crea el organizador inicial");
             return;
         }
+        String emailNormalizado = Usuario.normalizarEmail(email);
         if (usuarioService.crearOrganizadorSiNoExiste(nombre, email, password)) {
-            log.info("Organizador inicial creado con email {}", email);
+            log.info("Organizador inicial creado con email {}", emailNormalizado);
         } else {
-            log.info("Ya existe un usuario con email {}: no se modifica", email);
+            log.info("Ya existe un usuario con email {}: no se modifica", emailNormalizado);
         }
     }
 }
