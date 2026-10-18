@@ -2,6 +2,7 @@ package com.jnrptt.eventos.service;
 
 import com.jnrptt.eventos.dto.CompraRequest;
 import com.jnrptt.eventos.dto.CompraResponse;
+import com.jnrptt.eventos.event.CompraConfirmadaEvent;
 import com.jnrptt.eventos.exception.AforoInsuficienteException;
 import com.jnrptt.eventos.exception.TipoEntradaNotFoundException;
 import com.jnrptt.eventos.model.Compra;
@@ -11,6 +12,7 @@ import com.jnrptt.eventos.model.Usuario;
 import com.jnrptt.eventos.repository.CompraRepository;
 import com.jnrptt.eventos.repository.TipoEntradaRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,7 @@ public class CompraService {
     private final CompraRepository compraRepository;
     private final UsuarioService usuarioService;
     private final TipoEntradaRepository tipoEntradaRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public CompraResponse comprar(Long usuarioId, CompraRequest compraRequest) {
@@ -50,6 +53,7 @@ public class CompraService {
                 tipoEntrada
         );
         Compra guardada = compraRepository.save(compra);
+        eventPublisher.publishEvent(CompraConfirmadaEvent.from(guardada));
         return CompraResponse.from(guardada);
     }
 }
