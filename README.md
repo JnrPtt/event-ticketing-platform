@@ -211,9 +211,40 @@ El precio unitario se copia del tipo de entrada en el momento de la compra, así
 
 ### Errores
 
+Los errores siguen el formato estándar `ProblemDetail` ([RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)), con `Content-Type: application/problem+json`:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Conflict",
+  "status": 409,
+  "detail": "Aforo insuficiente: se solicitaron 11 entradas y solo quedan 10",
+  "instance": "/compras"
+}
+```
+
+Los errores de validación añaden la lista `errores`, con un elemento por cada campo no válido:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "La petición tiene campos no válidos",
+  "instance": "/compras",
+  "errores": [
+    { "campo": "cantidad", "mensaje": "La cantidad debe ser mayor que 0" }
+  ]
+}
+```
+
+Los servicios lanzan excepciones propias (`AforoInsuficienteException`, `EventoNotFoundException`…) que no saben nada de HTTP; `GlobalExceptionHandler` decide el código de cada una. Al extender `ResponseEntityExceptionHandler`, los errores del propio Spring MVC (JSON mal formado, método no permitido, etc.) salen con el mismo formato.
+
+Los `401` y `403` que genera Spring Security (sin token, token inválido o sin el rol necesario) se producen antes de llegar a los controladores: van con el body vacío y la cabecera `WWW-Authenticate`, como define el estándar de tokens Bearer (RFC 6750). El `401` de credenciales incorrectas en el login sí es un `ProblemDetail`, y es idéntico tanto si el email no existe como si el password es incorrecto.
+
 | Código | Cuándo |
 |---|---|
-| `400` | Validación fallida o tipo de entrada repetido |
+| `400` | Validación fallida, JSON mal formado o tipo de entrada repetido |
 | `401` | Sin token, token inválido o caducado, o email/password incorrectos en el login |
 | `403` | Token válido pero sin el rol necesario (p. ej. un `USUARIO` creando eventos) |
 | `404` | Evento, usuario o tipo de entrada no encontrado |

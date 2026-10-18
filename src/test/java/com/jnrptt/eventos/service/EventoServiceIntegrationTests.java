@@ -3,6 +3,7 @@ package com.jnrptt.eventos.service;
 import com.jnrptt.eventos.TestContainersConfiguration;
 import com.jnrptt.eventos.dto.EventoRequest;
 import com.jnrptt.eventos.dto.TipoEntradaRequest;
+import com.jnrptt.eventos.exception.AforoMenorQueVendidasException;
 import com.jnrptt.eventos.model.TiposEntrada;
 import com.jnrptt.eventos.repository.EventoRepository;
 import com.jnrptt.eventos.repository.TipoEntradaRepository;
@@ -11,7 +12,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.context.annotation.Import;
 
 import java.math.BigDecimal;
@@ -83,7 +83,7 @@ class EventoServiceIntegrationTests {
 
         assertThatThrownBy(() -> eventoService.editEventoById(creado.getId(), evento("Concierto", List.of(
                 entrada(TiposEntrada.GENERAL, "30.00", 20)
-        )))).isInstanceOf(ResponseStatusException.class);
+        )))).isInstanceOf(AforoMenorQueVendidasException.class);
 
         eventoService.deleteEventoById(creado.getId());
     }

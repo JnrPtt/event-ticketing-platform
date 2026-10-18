@@ -1,7 +1,10 @@
 package com.jnrptt.eventos.service;
 
 import com.jnrptt.eventos.dto.EventoRequest;
+import com.jnrptt.eventos.exception.AforoMenorQueVendidasException;
 import com.jnrptt.eventos.exception.EventoNotFoundException;
+import com.jnrptt.eventos.exception.TipoEntradaConVentasException;
+import com.jnrptt.eventos.exception.TipoEntradaRepetidoException;
 import com.jnrptt.eventos.model.Evento;
 import com.jnrptt.eventos.model.TipoEntrada;
 import com.jnrptt.eventos.model.TiposEntrada;
@@ -9,10 +12,8 @@ import com.jnrptt.eventos.repository.EventoRepository;
 import com.jnrptt.eventos.repository.EventoSpecifications;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.EnumSet;
@@ -76,8 +77,7 @@ public class EventoService {
             }
             int vendidas = actual.getAforoTotal() - actual.getAforoDisponible();
             if (nueva.getAforoTotal() < vendidas) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "El aforo de " + nueva.getNombre() + " no puede ser menor que las entradas vendidas (" + vendidas + ")");
+                throw new AforoMenorQueVendidasException(nueva.getNombre(), vendidas);
             }
             actual.setPrecio(nueva.getPrecio());
             actual.setAforoTotal(nueva.getAforoTotal());
@@ -87,8 +87,7 @@ public class EventoService {
         existentes.values().forEach(eliminada -> {
             int vendidas = eliminada.getAforoTotal() - eliminada.getAforoDisponible();
             if (vendidas > 0) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "No se puede eliminar " + eliminada.getNombre() + " porque tiene entradas vendidas (" + vendidas + ")");
+                throw new TipoEntradaConVentasException(eliminada.getNombre(), vendidas);
             }
         });
         return evento;
@@ -98,8 +97,7 @@ public class EventoService {
         Set<TiposEntrada> vistos = EnumSet.noneOf(TiposEntrada.class);
         eventoRequest.tipoEntrada().forEach(entrada -> {
             if (!vistos.add(entrada.nombre())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "El tipo de entrada " + entrada.nombre() + " está repetido");
+                throw new TipoEntradaRepetidoException(entrada.nombre());
             }
         });
     }
