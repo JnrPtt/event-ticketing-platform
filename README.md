@@ -136,6 +136,7 @@ El registro siempre crea usuarios `USUARIO`, para que nadie pueda asignarse un r
 - Los passwords se guardan con BCrypt. Como BCrypt solo admite 72 bytes, el máximo se valida en bytes y no en caracteres.
 - El email se normaliza (minúsculas, sin espacios) al registrar y al hacer login.
 - Email inexistente y password incorrecto devuelven el mismo `401` con el mismo mensaje, para no revelar qué emails están registrados.
+- Por el mismo motivo, **tardan lo mismo**. Antes, con un email inexistente el login respondía sin ejecutar BCrypt (unos 0,1 ms frente a unos 50 ms con un password incorrecto), y midiendo el tiempo se podía saber si un email existía aunque el body fuera idéntico (*ataque de timing*). Ahora siempre se ejecuta BCrypt: si el email no existe, contra un hash ficticio calculado al arrancar con el mismo encoder. `LoginTiempoDeRespuestaTest` mide los dos casos con BCrypt real.
 - El usuario de una compra sale del token (`sub`), nunca del body: nadie puede comprar en nombre de otro.
 - La API no guarda sesión (`STATELESS`): cada petición se valida solo con su token.
 
@@ -437,7 +438,22 @@ src/main/java/com/jnrptt/eventos/
 ./gradlew test
 ```
 
-Tests de integración con `@SpringBootTest` sobre H2 en memoria. Kafka se levanta con [Testcontainers](https://testcontainers.com/) (misma imagen `apache/kafka:4.0.1` que en `docker-compose`), así que **los tests necesitan Docker en marcha**. Spring Boot configura la conexión al contenedor con `@ServiceConnection`; no hace falta tener el broker de `docker-compose` levantado.
+Hay dos tipos de tests:
+
+| Tipo | Clases | Qué prueban | Necesitan |
+|---|---|---|---|
+| Unitarios | `CompraTest`, `CompraServiceTest`, `UsuarioServiceTest`, `LoginTiempoDeRespuestaTest` | La lógica aislada: transiciones de estado, qué se guarda, qué se publica, el orden de los bloqueos. Las dependencias son mocks de Mockito | Nada (tardan menos de 1 s) |
+| Integración | `*IntegrationTests` | La aplicación completa con base de datos y Kafka reales: HTTP, seguridad, concurrencia, mensajería | Docker |
+
+Los unitarios no sustituyen a los de integración: con mocks no se puede comprobar que un `SELECT ... FOR UPDATE` bloquee de verdad ni que un mensaje llegue al consumer. Sirven para lo que no depende de la infraestructura, por ejemplo que una cancelación repetida se rechace antes de bloquear el tipo de entrada (`CompraServiceTest` lo verifica con `verify(..., never())`).
+
+Solo los unitarios:
+
+```bash
+./gradlew test --tests "*Test"
+```
+
+Los tests de integración usan `@SpringBootTest` sobre H2 en memoria. Kafka se levanta con [Testcontainers](https://testcontainers.com/) (misma imagen `apache/kafka:4.0.1` que en `docker-compose`), así que **los tests necesitan Docker en marcha**. Spring Boot configura la conexión al contenedor con `@ServiceConnection`; no hace falta tener el broker de `docker-compose` levantado.
 
 `CompraKafkaIntegrationTests` comprueba el flujo completo contra el broker real:
 

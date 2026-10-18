@@ -9,17 +9,25 @@ import com.jnrptt.eventos.model.Rol;
 import com.jnrptt.eventos.model.Usuario;
 import com.jnrptt.eventos.repository.UsuarioRepository;
 import com.jnrptt.eventos.validation.PoliticaPassword;
-import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+import java.util.UUID;
+
 @Service
-@RequiredArgsConstructor
 public class UsuarioService {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
+    private final String hashFicticio;
+
+    public UsuarioService(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder) {
+        this.usuarioRepository = usuarioRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.hashFicticio = passwordEncoder.encode(UUID.randomUUID().toString());
+    }
 
     @Transactional(readOnly = true)
     public Usuario obtenerPorId(Long id) {
@@ -46,20 +54,15 @@ public class UsuarioService {
     @Transactional(readOnly = true)
     public Usuario autenticar(LoginRequest loginRequest) {
         String email = Usuario.normalizarEmail(loginRequest.email());
-        Usuario usuario = usuarioRepository.findByEmail(email)
-                .orElseThrow(CredencialesInvalidasException::new);
-        if (!passwordEncoder.matches(loginRequest.password(), usuario.getPassword())) {
+        Optional<Usuario> usuario = usuarioRepository.findByEmail(email);
+        String hash = usuario.map(Usuario::getPassword).orElse(hashFicticio);
+        boolean passwordCorrecto = passwordEncoder.matches(loginRequest.password(), hash);
+        if (usuario.isEmpty() || !passwordCorrecto) {
             throw new CredencialesInvalidasException();
         }
-        return usuario;
+        return usuario.get();
     }
 
-    /**
-     * Crea un usuario ORGANIZADOR si no existe ninguno con ese email.
-     * Si el email ya existe no se modifica nada (ni password ni rol).
-     *
-     * @return true si se ha creado el usuario, false si ya existía.
-     */
     @Transactional
     public boolean crearOrganizadorSiNoExiste(String nombre, String email, String password) {
         String emailNormalizado = Usuario.normalizarEmail(email);
