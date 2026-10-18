@@ -14,6 +14,7 @@ API REST para gestionar eventos, sus tipos de entrada (GENERAL / VIP) con contro
 | Documentación API | springdoc-openapi 3.1.0 (Swagger UI)       |
 | Base de datos   | H2 en memoria (local) · PostgreSQL 17 (Docker) |
 | Mensajería      | Apache Kafka 4.0.1 (Docker)                  |
+| Tests           | JUnit 5, Mockito, Testcontainers (Kafka)     |
 | Otros           | Lombok                                       |
 
 ## Estado actual
@@ -26,7 +27,7 @@ API REST para gestionar eventos, sus tipos de entrada (GENERAL / VIP) con contro
 | Usuarios | ✅ | Registro y login; organizador inicial creado al arrancar desde variables de entorno |
 | Seguridad | ✅ | JWT (HS256) con roles `USUARIO` / `ORGANIZADOR`; el comprador sale del token |
 | Estados de compra | 🚧 | Las compras se crean `CONFIRMADA`; `PENDIENTE` (pago) y `CANCELADA` (devolución de aforo) pendientes |
-| Kafka | 🚧 | Dependencia y broker configurados; aún sin productores/consumidores |
+| Kafka | ✅ | Evento `CompraConfirmada` publicado tras el commit; un consumer simula el email de confirmación (con reintentos y DLT) |
 
 ## Arranque rápido
 
@@ -37,7 +38,13 @@ API REST para gestionar eventos, sus tipos de entrada (GENERAL / VIP) con contro
 gradlew.bat bootRun      # Windows
 ```
 
-La aplicación arranca en `http://localhost:8080`. Por defecto Kafka apunta a `localhost:9092` (configurable con `SPRING_KAFKA_BOOTSTRAP_SERVERS`).
+La aplicación arranca en `http://localhost:8080`. Por defecto Kafka apunta a `localhost:29092` (configurable con `SPRING_KAFKA_BOOTSTRAP_SERVERS`), que es el puerto externo del broker de `docker-compose`. Levántalo antes de arrancar:
+
+```bash
+JWT_SECRET=local docker compose up -d kafka
+```
+
+`docker compose` exige `JWT_SECRET` aunque solo arranques Kafka; aquí basta cualquier valor porque la aplicación no corre en Docker. Sin broker la aplicación arranca, pero no puede publicar ni consumir mensajes.
 
 En local se usa un `JWT_SECRET` de desarrollo incluido en `application.properties`. Para poder crear eventos hace falta un organizador; defínelo antes de arrancar (ver [Organizador inicial](#organizador-inicial)):
 
@@ -265,17 +272,86 @@ Con la versión inicial el test falla; con el bloqueo pasa.
 
 **Solución.** El tipo de entrada se lee con bloqueo pesimista (`@Lock(LockModeType.PESSIMISTIC_WRITE)` en `TipoEntradaRepository.findByIdForUpdate`, que genera un `SELECT ... FOR UPDATE`). Las compras del mismo tipo de entrada esperan su turno en la base de datos y cada una ve el aforo ya descontado por la anterior. Se eligió el bloqueo pesimista en lugar del optimista (`@Version`) porque la venta de entradas tiene mucha contención sobre la misma fila: con el optimista, la mayoría de compras fallarían y habría que reintentarlas.
 
+## Mensajería con Kafka
+
+Cada compra confirmada publica un mensaje en Kafka. Un consumer lo lee y simula el envío del email de confirmación (de momento, una línea de log). El consumer vive en la misma aplicación, pero solo conoce el mensaje, así que podría moverse a otro servicio sin tocar el código de compras.
+
+```
+POST /compras
+  └─ CompraService.comprar()  (@Transactional)
+       ├─ descuenta aforo y guarda la Compra
+       └─ publishEvent(CompraConfirmadaEvent)        ← evento interno de Spring
+     COMMIT
+       └─ CompraConfirmadaPublisher  (@TransactionalEventListener AFTER_COMMIT)
+            └─ kafkaTemplate.send("compras.confirmadas", compraId, evento)
+                  └─ NotificacionConsumer  (@KafkaListener, grupo "notificaciones")
+                        └─ NotificacionService.enviarConfirmacion()
+```
+
+| Topic | Particiones | Uso |
+|---|---|---|
+| `compras.confirmadas` | 3 | Una entrada por compra confirmada; la clave es el `compraId` |
+| `compras.confirmadas-dlt` | 3 | Mensajes que el consumer no ha podido procesar (*Dead Letter Topic*) |
+
+Ejemplo de mensaje:
+
+```json
+{
+  "compraId": 1,
+  "usuarioId": 2,
+  "email": "ana@example.com",
+  "nombreEvento": "Concierto de verano",
+  "tipoEntrada": "GENERAL",
+  "cantidad": 2,
+  "total": 70.00,
+  "fechaCompra": "2026-10-18T14:57:38"
+}
+```
+
+### Decisiones
+
+- **Se publica después del commit.** Si el mensaje se enviara dentro de la transacción y luego hubiera un rollback, se mandaría el email de una compra que no existe. `@TransactionalEventListener(phase = AFTER_COMMIT)` solo se ejecuta si la transacción termina bien.
+- **El `compraId` es la clave.** Kafka solo garantiza el orden dentro de una partición, y la clave decide la partición. Así, todos los mensajes de una misma compra (por ejemplo, confirmada y después cancelada) se leen en orden.
+- **El mensaje es un record propio (`CompraConfirmadaEvent`), no la entidad.** Solo lleva tipos simples, así que un cambio en el modelo JPA no rompe los mensajes que ya están en el topic. Por el mismo motivo, el consumer no usa la cabecera `__TypeId__` (que lleva el nombre de la clase Java del productor): el tipo destino se fija en la configuración.
+- **Reintentos limitados y DLT.** Si el consumer falla, se reintenta 2 veces con 1 s de espera (`DefaultErrorHandler` + `FixedBackOff`) y después el mensaje pasa a `compras.confirmadas-dlt`, con cabeceras que explican el error. No se reintenta indefinidamente porque, mientras tanto, la partición queda bloqueada.
+- **Mensajes envenenados.** Un mensaje que ni siquiera se puede deserializar (*poison pill*) bloquearía la partición para siempre. `ErrorHandlingDeserializer` captura el error y el mensaje va directo a la DLT, sin reintentos.
+- **La DLT tiene las mismas particiones que el topic original**, porque el mensaje fallido se publica en la misma partición de la que vino.
+- **`auto-offset-reset=earliest`.** Un grupo de consumers nuevo empieza por el principio del topic en vez de ignorar los mensajes ya publicados.
+
+### Limitaciones conocidas
+
+- **Doble escritura (*dual write*).** La compra se guarda en la base de datos y el mensaje se envía a Kafka por separado. Si Kafka no está disponible justo después del commit, la compra queda guardada pero el mensaje se pierde; solo queda un `log.error`. La solución habitual es el patrón *outbox* (ver [Posibles mejoras](#posibles-mejoras)).
+- **Entrega *at-least-once*.** Si el consumer se cae después de procesar un mensaje y antes de confirmar el offset, lo vuelve a leer: el mismo email podría enviarse dos veces. El consumer no es idempotente.
+- **Valor en la DLT.** Cuando el error es de deserialización, el valor original se guarda en la DLT como un string base64 en lugar de los bytes tal cual, porque se publica con el serializador JSON. Se puede recuperar, pero no reenviar directamente.
+
+### Ver los mensajes
+
+Con el broker de `docker-compose` levantado:
+
+```bash
+# Mensajes de compras confirmadas (con clave y partición)
+docker exec -it eventos-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+  --topic compras.confirmadas --from-beginning --property print.key=true --property print.partition=true
+
+# Mensajes fallidos (con las cabeceras del error)
+docker exec -it eventos-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
+  --topic compras.confirmadas-dlt --from-beginning --property print.headers=true
+```
+
+Las cabeceras `kafka_dlt-original-partition`, `-offset` y `-timestamp` se guardan en binario, así que la consola las muestra con caracteres extraños.
+
 ## Estructura del proyecto
 
 ```
 src/main/java/com/jnrptt/eventos/
-├── config/       # Seguridad (JWT), OpenAPI y organizador inicial
+├── config/       # Seguridad (JWT), OpenAPI, topics de Kafka y organizador inicial
 ├── controller/   # Controladores REST
 ├── dto/          # Objetos de petición y respuesta
+├── event/        # Mensaje de Kafka, publisher (tras el commit) y consumer
 ├── exception/    # Excepciones propias y manejador global
 ├── model/        # Entidades JPA y enums
 ├── repository/   # Repositorios Spring Data y Specifications
-├── service/      # Lógica de negocio y generación de tokens
+├── service/      # Lógica de negocio, generación de tokens y notificaciones
 └── validation/   # Validaciones propias (política de password)
 ```
 
@@ -285,11 +361,24 @@ src/main/java/com/jnrptt/eventos/
 ./gradlew test
 ```
 
-Tests de integración con `@SpringBootTest` sobre H2 en memoria.
+Tests de integración con `@SpringBootTest` sobre H2 en memoria. Kafka se levanta con [Testcontainers](https://testcontainers.com/) (misma imagen `apache/kafka:4.0.1` que en `docker-compose`), así que **los tests necesitan Docker en marcha**. Spring Boot configura la conexión al contenedor con `@ServiceConnection`; no hace falta tener el broker de `docker-compose` levantado.
+
+`CompraKafkaIntegrationTests` comprueba el flujo completo contra el broker real:
+
+- una compra confirmada llega al consumer con sus datos;
+- una compra rechazada por aforo no publica nada;
+- un evento publicado dentro de una transacción que hace rollback no llega a enviarse. Con `@EventListener` en lugar de `@TransactionalEventListener(AFTER_COMMIT)`, este test falla.
 
 ## Próximos pasos (tentativo)
 
 - [x] Endpoint de compras con control de aforo y concurrencia
 - [x] Autenticación con JWT, registro/login y roles (usuario / organizador); el comprador sale del token
-- [ ] Publicación de eventos de compra en Kafka
+- [x] Publicación de eventos de compra en Kafka y consumer de notificaciones
 - [ ] Estados de compra `PENDIENTE` (pago simulado) y `CANCELADA` (devuelve aforo)
+
+## Posibles mejoras
+
+- **Patrón *outbox*.** Guardar el mensaje en una tabla dentro de la misma transacción que la compra y publicarlo desde ahí (con un proceso periódico o con CDC, por ejemplo Debezium). Elimina la pérdida de mensajes si Kafka cae justo después del commit.
+- **Consumer idempotente.** Guardar los `compraId` ya procesados y descartar los repetidos, para que una relectura no envíe el email dos veces.
+- **`@RetryableTopic`.** Reintentos en topics aparte con espera creciente, sin bloquear la partición mientras se reintenta.
+- **DLT con los bytes originales.** Publicar los mensajes no deserializables con un `ByteArraySerializer` para poder reenviarlos tal cual.
