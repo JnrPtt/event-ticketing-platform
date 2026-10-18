@@ -74,7 +74,7 @@ class CompraServiceIntegrationTests {
                 escenario.tipoEntrada().getId(), 3));
 
         assertThat(respuesta.id()).isNotNull();
-        assertThat(respuesta.estado()).isEqualTo(EstadoCompra.CONFIRMADA);
+        assertThat(respuesta.estado()).isEqualTo(EstadoCompra.PENDIENTE);
         assertThat(respuesta.cantidad()).isEqualTo(3);
         assertThat(respuesta.precioUnitario()).isEqualByComparingTo("25");
         assertThat(respuesta.total()).isEqualByComparingTo("75");

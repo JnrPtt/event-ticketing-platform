@@ -4,6 +4,7 @@ import com.jnrptt.eventos.dto.CompraRequest;
 import com.jnrptt.eventos.dto.CompraResponse;
 import com.jnrptt.eventos.event.CompraConfirmadaEvent;
 import com.jnrptt.eventos.exception.AforoInsuficienteException;
+import com.jnrptt.eventos.exception.CompraNotFoundException;
 import com.jnrptt.eventos.exception.TipoEntradaNotFoundException;
 import com.jnrptt.eventos.model.Compra;
 import com.jnrptt.eventos.model.EstadoCompra;
@@ -13,6 +14,10 @@ import com.jnrptt.eventos.repository.CompraRepository;
 import com.jnrptt.eventos.repository.TipoEntradaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +26,8 @@ import java.time.LocalDateTime;
 @Service
 @RequiredArgsConstructor
 public class CompraService {
+    private static final Sort ORDEN_COMPRAS = Sort.by(Sort.Direction.DESC, "fecha", "id");
+
     private final CompraRepository compraRepository;
     private final UsuarioService usuarioService;
     private final TipoEntradaRepository tipoEntradaRepository;
@@ -46,14 +53,43 @@ public class CompraService {
         Compra compra = new Compra(
                 null,
                 cantidad,
-                EstadoCompra.CONFIRMADA,
+                EstadoCompra.PENDIENTE,
                 LocalDateTime.now(),
                 tipoEntrada.getPrecio(),
                 usuario,
                 tipoEntrada
         );
         Compra guardada = compraRepository.save(compra);
-        eventPublisher.publishEvent(CompraConfirmadaEvent.from(guardada));
         return CompraResponse.from(guardada);
+    }
+
+    @Transactional
+    public CompraResponse pagar(Long usuarioId, Long compraId) {
+        Compra compra = compraRepository.findByIdAndUsuarioIdForUpdate(compraId, usuarioId)
+                .orElseThrow(() -> new CompraNotFoundException(compraId));
+
+        compra.pagar();
+        eventPublisher.publishEvent(CompraConfirmadaEvent.from(compra));
+        return CompraResponse.from(compra);
+    }
+
+    @Transactional
+    public CompraResponse cancelar(Long usuarioId, Long compraId) {
+        Compra compra = compraRepository.findByIdAndUsuarioIdForUpdate(compraId, usuarioId)
+                .orElseThrow(() -> new CompraNotFoundException(compraId));
+
+        compra.cancelar();
+
+        Long tipoEntradaId = compra.getTipoEntrada().getId();
+        TipoEntrada tipoEntrada = tipoEntradaRepository.findByIdForUpdate(tipoEntradaId)
+                .orElseThrow(() -> new TipoEntradaNotFoundException(tipoEntradaId));
+        tipoEntrada.setAforoDisponible(tipoEntrada.getAforoDisponible() + compra.getCantidad());
+        return CompraResponse.from(compra);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<CompraResponse> listarDelUsuario(Long usuarioId, Pageable pageable) {
+        Pageable pagina = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), ORDEN_COMPRAS);
+        return compraRepository.findByUsuarioId(usuarioId, pagina).map(CompraResponse::from);
     }
 }

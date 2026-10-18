@@ -88,11 +88,13 @@ class CompraKafkaIntegrationTests {
     }
 
     @Test
-    void compraConfirmadaLlegaAlConsumerConLosDatosDeLaCompra() {
+    void compraPagadaLlegaAlConsumerConLosDatosDeLaCompra() {
         var escenario = creaEscenario();
+        Long usuarioId = escenario.usuario().getId();
 
-        CompraResponse compra = compraService.comprar(escenario.usuario().getId(),
+        CompraResponse compra = compraService.comprar(usuarioId,
                 new CompraRequest(escenario.tipoEntrada().getId(), 2));
+        compraService.pagar(usuarioId, compra.id());
 
         verify(notificacionService, timeout(ESPERA_MENSAJE_MS)).enviarConfirmacion(argThat(evento ->
                 evento.compraId().equals(compra.id())
@@ -102,6 +104,18 @@ class CompraKafkaIntegrationTests {
                         && evento.tipoEntrada().equals("GENERAL")
                         && evento.cantidad() == 2
                         && evento.total().compareTo(new BigDecimal("50.00")) == 0));
+    }
+
+    // La reserva (PENDIENTE) no es una compra confirmada: el mensaje solo sale al pagar.
+    @Test
+    void reservarSinPagarNoPublicaNada() {
+        var escenario = creaEscenario();
+
+        CompraResponse compra = compraService.comprar(escenario.usuario().getId(),
+                new CompraRequest(escenario.tipoEntrada().getId(), 2));
+
+        verify(notificacionService, after(ESPERA_SIN_MENSAJE_MS).never())
+                .enviarConfirmacion(argThat(evento -> evento.compraId().equals(compra.id())));
     }
 
     @Test

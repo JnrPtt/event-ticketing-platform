@@ -1,10 +1,8 @@
 package com.jnrptt.eventos.model;
 
+import com.jnrptt.eventos.exception.TransicionEstadoInvalidaException;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -26,6 +24,7 @@ public class Compra {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "estado", nullable = false)
+    @Setter(AccessLevel.NONE)
     private EstadoCompra estado;
 
     @Column(name = "fecha", nullable = false)
@@ -42,4 +41,17 @@ public class Compra {
     @JoinColumn(name = "tipo_entrada_id", nullable = false)
     private TipoEntrada tipoEntrada;
 
+    public void pagar() {
+        if (estado != EstadoCompra.PENDIENTE) {
+            throw new TransicionEstadoInvalidaException("pagar", estado);
+        }
+        estado = EstadoCompra.CONFIRMADA;
+    }
+
+    public void cancelar() {
+        if (estado == EstadoCompra.CANCELADA) {
+            throw new TransicionEstadoInvalidaException("cancelar", estado);
+        }
+        estado = EstadoCompra.CANCELADA;
+    }
 }

@@ -26,7 +26,8 @@ API REST para gestionar eventos, sus tipos de entrada (GENERAL / VIP) con contro
 | Compra de entradas | ✅ | `POST /compras` con control de aforo y bloqueo pesimista frente a compras concurrentes |
 | Usuarios | ✅ | Registro y login; organizador inicial creado al arrancar desde variables de entorno |
 | Seguridad | ✅ | JWT (HS256) con roles `USUARIO` / `ORGANIZADOR`; el comprador sale del token |
-| Estados de compra | 🚧 | Las compras se crean `CONFIRMADA`; `PENDIENTE` (pago) y `CANCELADA` (devolución de aforo) pendientes |
+| Estados de compra | ✅ | Reserva `PENDIENTE`, pago simulado (`CONFIRMADA`) y cancelación (`CANCELADA`) que devuelve el aforo |
+| Listado de compras | ✅ | `GET /compras` paginado con las compras del usuario del token |
 | Kafka | ✅ | Evento `CompraConfirmada` publicado tras el commit; un consumer simula el email de confirmación (con reintentos y DLT) |
 
 ## Arranque rápido
@@ -119,7 +120,7 @@ El token lleva el id del usuario (`sub`) y su rol (`roles`).
 | `POST /auth/registro`, `POST /auth/login` | ✅ | ✅ | ✅ |
 | `GET /eventos`, `GET /eventos/{id}` | ✅ | ✅ | ✅ |
 | `POST /eventos`, `PUT /eventos/{id}`, `DELETE /eventos/{id}` | `401` | `403` | ✅ |
-| `POST /compras` | `401` | ✅ | ✅ |
+| `POST /compras`, `POST /compras/{id}/pagar`, `POST /compras/{id}/cancelar`, `GET /compras` | `401` | ✅ (solo las suyas) | ✅ (solo las suyas) |
 | Swagger, `/actuator/health`, `/actuator/info` | ✅ | ✅ | ✅ |
 
 ### Organizador inicial
@@ -178,11 +179,14 @@ GET /eventos?ciudad=Madrid&fecha=2026-12-01
 
 ### Compras
 
-Requiere token (cualquier rol). La compra se hace a nombre del usuario del token; el body no indica el usuario.
+Requiere token (cualquier rol). La compra se hace a nombre del usuario del token; el body no indica el usuario. Cada usuario solo ve, paga y cancela sus propias compras.
 
 | Método | Ruta | Descripción | Respuesta |
 |---|---|---|---|
-| `POST` | `/compras` | Compra entradas de un tipo y descuenta el aforo | `201` / `400` / `401` / `404` / `409` |
+| `POST` | `/compras` | Reserva entradas de un tipo (`PENDIENTE`) y descuenta el aforo | `201` / `400` / `401` / `404` / `409` |
+| `POST` | `/compras/{id}/pagar` | Pago simulado: pasa la compra a `CONFIRMADA` | `200` / `401` / `404` / `409` |
+| `POST` | `/compras/{id}/cancelar` | Cancela la compra y devuelve el aforo | `200` / `401` / `404` / `409` |
+| `GET` | `/compras` | Mis compras, paginadas (`page`, `size`), de la más reciente a la más antigua | `200` / `401` |
 
 Ejemplo de petición:
 
@@ -202,12 +206,53 @@ Ejemplo de respuesta (`201`):
   "cantidad": 3,
   "precioUnitario": 35.00,
   "total": 105.00,
-  "estado": "CONFIRMADA",
+  "estado": "PENDIENTE",
   "fecha": "2026-10-13T12:00:00"
 }
 ```
 
 El precio unitario se copia del tipo de entrada en el momento de la compra, así que un cambio de precio posterior no altera las compras existentes.
+
+#### Estados de una compra
+
+```
+POST /compras ──► PENDIENTE ──pagar──► CONFIRMADA
+                      │                    │
+                      └──cancelar──► CANCELADA ◄──cancelar (devolución)
+```
+
+| Estado actual | `pagar` | `cancelar` |
+|---|---|---|
+| `PENDIENTE` | → `CONFIRMADA` | → `CANCELADA` |
+| `CONFIRMADA` | `409` | → `CANCELADA` |
+| `CANCELADA` | `409` | `409` |
+
+- **La reserva ya descuenta el aforo.** Así nadie puede quedarse sin entrada mientras paga. Al cancelar se devuelve.
+- **Las transiciones viven en la entidad** (`Compra.pagar()` y `Compra.cancelar()`), que no expone `setEstado`. Ningún servicio puede saltarse las reglas.
+- **La compra de otro usuario devuelve `404`, no `403`**, para no revelar que existe. El filtro por usuario va en la propia consulta.
+- **El mensaje de Kafka sale al pagar**, no al reservar: una reserva sin pagar no es una compra confirmada.
+
+#### Concurrencia al cancelar
+
+Si varias peticiones cancelan a la vez la misma compra, todas leerían el estado sin cancelar y cada una devolvería el aforo, con lo que el tipo de entrada acabaría con más plazas de las que tiene. Por eso `cancelar` lee la compra con `SELECT ... FOR UPDATE` (`CompraRepository.findByIdAndUsuarioIdForUpdate`): la segunda petición espera, ve `CANCELADA` y recibe un `409`. Después bloquea el tipo de entrada para devolver el aforo, igual que al comprar.
+
+Los bloqueos se toman siempre en el mismo orden (primero la compra y después el tipo de entrada); `comprar` solo bloquea el tipo, así que no hay ciclos ni *deadlocks*. `CompraEstadosServiceIntegrationTests.cancelacionesConcurrentesSoloDevuelvenElAforoUnaVez` lanza 10 cancelaciones simultáneas de la misma compra y comprueba que solo una tiene éxito y que el aforo se devuelve una sola vez.
+
+#### Listado paginado
+
+Ejemplo (`GET /compras?page=0&size=2`):
+
+```json
+{
+  "content": [ { "id": 3, "estado": "CONFIRMADA", "...": "..." }, { "id": 2, "estado": "PENDIENTE", "...": "..." } ],
+  "page": { "size": 2, "number": 0, "totalElements": 3, "totalPages": 2 }
+}
+```
+
+- Tamaño por defecto 20 y máximo 100: un `size` mayor se limita a 100.
+- **El orden lo fija el servidor** (fecha descendente y, a igual fecha, id). Se ignora el parámetro `sort`: con un orden libre se podría ordenar por campos que no se devuelven (por ejemplo `usuario.password`) e inferir su valor por la posición.
+- **Sin N+1.** La respuesta incluye el tipo de entrada de cada compra; un `@EntityGraph` lo trae en la misma consulta en vez de lanzar una consulta extra por compra. `CompraListadoConsultasIntegrationTests` cuenta las consultas SQL con las estadísticas de Hibernate.
+- La respuesta usa `PagedModel` (formato estable de Spring Data) en lugar de serializar `Page` directamente.
 
 ### Errores
 
@@ -305,12 +350,12 @@ Con la versión inicial el test falla; con el bloqueo pasa.
 
 ## Mensajería con Kafka
 
-Cada compra confirmada publica un mensaje en Kafka. Un consumer lo lee y simula el envío del email de confirmación (de momento, una línea de log). El consumer vive en la misma aplicación, pero solo conoce el mensaje, así que podría moverse a otro servicio sin tocar el código de compras.
+Cada compra confirmada (al pagarla) publica un mensaje en Kafka. Un consumer lo lee y simula el envío del email de confirmación (de momento, una línea de log). El consumer vive en la misma aplicación, pero solo conoce el mensaje, así que podría moverse a otro servicio sin tocar el código de compras.
 
 ```
-POST /compras
-  └─ CompraService.comprar()  (@Transactional)
-       ├─ descuenta aforo y guarda la Compra
+POST /compras/{id}/pagar
+  └─ CompraService.pagar()  (@Transactional)
+       ├─ Compra.pagar(): PENDIENTE → CONFIRMADA
        └─ publishEvent(CompraConfirmadaEvent)        ← evento interno de Spring
      COMMIT
        └─ CompraConfirmadaPublisher  (@TransactionalEventListener AFTER_COMMIT)
@@ -396,7 +441,8 @@ Tests de integración con `@SpringBootTest` sobre H2 en memoria. Kafka se levant
 
 `CompraKafkaIntegrationTests` comprueba el flujo completo contra el broker real:
 
-- una compra confirmada llega al consumer con sus datos;
+- una compra pagada llega al consumer con sus datos;
+- una reserva sin pagar no publica nada;
 - una compra rechazada por aforo no publica nada;
 - un evento publicado dentro de una transacción que hace rollback no llega a enviarse. Con `@EventListener` en lugar de `@TransactionalEventListener(AFTER_COMMIT)`, este test falla.
 
@@ -405,10 +451,13 @@ Tests de integración con `@SpringBootTest` sobre H2 en memoria. Kafka se levant
 - [x] Endpoint de compras con control de aforo y concurrencia
 - [x] Autenticación con JWT, registro/login y roles (usuario / organizador); el comprador sale del token
 - [x] Publicación de eventos de compra en Kafka y consumer de notificaciones
-- [ ] Estados de compra `PENDIENTE` (pago simulado) y `CANCELADA` (devuelve aforo)
+- [x] Estados de compra `PENDIENTE` (pago simulado) y `CANCELADA` (devuelve aforo)
+- [x] Listado paginado de las compras del usuario
 
 ## Posibles mejoras
 
+- **Caducidad de las reservas.** Una compra `PENDIENTE` retiene aforo indefinidamente. Un proceso periódico (`@Scheduled`) podría cancelar las reservas sin pagar tras unos minutos y devolver el aforo.
+- **Eventos de cancelación.** Publicar también las cancelaciones en Kafka (por ejemplo, para un email de devolución). Requiere distinguir tipos de mensaje en un mismo topic, para mantener el orden por `compraId`, o aceptar un topic aparte sin orden garantizado entre ambos.
 - **Patrón *outbox*.** Guardar el mensaje en una tabla dentro de la misma transacción que la compra y publicarlo desde ahí (con un proceso periódico o con CDC, por ejemplo Debezium). Elimina la pérdida de mensajes si Kafka cae justo después del commit.
 - **Consumer idempotente.** Guardar los `compraId` ya procesados y descartar los repetidos, para que una relectura no envíe el email dos veces.
 - **`@RetryableTopic`.** Reintentos en topics aparte con espera creciente, sin bloquear la partición mientras se reintenta.

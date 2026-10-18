@@ -111,7 +111,7 @@ class SeguridadIntegrationTests {
 
         comprar(tipoEntrada.getId(), "Bearer " + token)
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.estado").value("CONFIRMADA"));
+                .andExpect(jsonPath("$.estado").value("PENDIENTE"));
 
         assertThat(compraRepository.count()).isEqualTo(1);
     }

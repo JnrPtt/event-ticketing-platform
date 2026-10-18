@@ -20,7 +20,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler({
             EventoNotFoundException.class,
             UsuarioNotFoundException.class,
-            TipoEntradaNotFoundException.class
+            TipoEntradaNotFoundException.class,
+            CompraNotFoundException.class
     })
     public ProblemDetail handleNotFound(RuntimeException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
@@ -30,7 +31,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             AforoInsuficienteException.class,
             EmailYaRegistradoException.class,
             AforoMenorQueVendidasException.class,
-            TipoEntradaConVentasException.class
+            TipoEntradaConVentasException.class,
+            TransicionEstadoInvalidaException.class
     })
     public ProblemDetail handleConflict(RuntimeException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
