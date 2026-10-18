@@ -1,5 +1,6 @@
 package com.jnrptt.eventos.service;
 
+import com.jnrptt.eventos.TestContainersConfiguration;
 import com.jnrptt.eventos.dto.RegistroRequest;
 import com.jnrptt.eventos.exception.EmailYaRegistradoException;
 import com.jnrptt.eventos.model.Rol;
@@ -12,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.context.annotation.Import;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doReturn;
 
 @SpringBootTest
+@Import(TestContainersConfiguration.class)
 class UsuarioServiceIntegrationTests {
 
     @Autowired

@@ -1,5 +1,6 @@
 package com.jnrptt.eventos.controller;
 
+import com.jnrptt.eventos.TestContainersConfiguration;
 import com.jayway.jsonpath.JsonPath;
 import com.jnrptt.eventos.model.Evento;
 import com.jnrptt.eventos.model.Rol;
@@ -23,6 +24,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.context.annotation.Import;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,6 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
+@Import(TestContainersConfiguration.class)
 @AutoConfigureMockMvc
 class SeguridadIntegrationTests {
 

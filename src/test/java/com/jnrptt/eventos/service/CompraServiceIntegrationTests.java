@@ -1,5 +1,6 @@
 package com.jnrptt.eventos.service;
 
+import com.jnrptt.eventos.TestContainersConfiguration;
 import com.jnrptt.eventos.dto.CompraRequest;
 import com.jnrptt.eventos.exception.AforoInsuficienteException;
 import com.jnrptt.eventos.exception.TipoEntradaNotFoundException;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
+@Import(TestContainersConfiguration.class)
 class CompraServiceIntegrationTests {
 
     private static final int AFORO = 10;

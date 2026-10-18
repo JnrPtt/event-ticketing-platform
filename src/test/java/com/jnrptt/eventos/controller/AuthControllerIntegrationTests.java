@@ -1,5 +1,6 @@
 package com.jnrptt.eventos.controller;
 
+import com.jnrptt.eventos.TestContainersConfiguration;
 import com.jayway.jsonpath.JsonPath;
 import com.jnrptt.eventos.model.Rol;
 import com.jnrptt.eventos.repository.UsuarioRepository;
@@ -15,6 +16,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.context.annotation.Import;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -23,6 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
+@Import(TestContainersConfiguration.class)
 @AutoConfigureMockMvc
 class AuthControllerIntegrationTests {
 

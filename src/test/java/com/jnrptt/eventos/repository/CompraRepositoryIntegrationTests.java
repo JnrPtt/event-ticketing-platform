@@ -1,5 +1,6 @@
 package com.jnrptt.eventos.repository;
 
+import com.jnrptt.eventos.TestContainersConfiguration;
 import com.jnrptt.eventos.model.Compra;
 import com.jnrptt.eventos.model.EstadoCompra;
 import com.jnrptt.eventos.model.Evento;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,6 +23,7 @@ import java.util.ArrayList;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@Import(TestContainersConfiguration.class)
 class CompraRepositoryIntegrationTests {
 
     @Autowired

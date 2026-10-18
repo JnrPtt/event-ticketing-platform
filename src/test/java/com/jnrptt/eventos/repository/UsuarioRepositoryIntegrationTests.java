@@ -1,5 +1,6 @@
 package com.jnrptt.eventos.repository;
 
+import com.jnrptt.eventos.TestContainersConfiguration;
 import com.jnrptt.eventos.model.Rol;
 import com.jnrptt.eventos.model.Usuario;
 import org.junit.jupiter.api.AfterEach;
@@ -8,11 +9,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.annotation.Import;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
+@Import(TestContainersConfiguration.class)
 class UsuarioRepositoryIntegrationTests {
 
     @Autowired
