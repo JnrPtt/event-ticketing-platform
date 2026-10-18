@@ -27,7 +27,7 @@ Lo más destacable:
 | Funcionalidad | Detalle |
 |---|---|
 | CRUD de eventos con tipos de entrada | Filtros opcionales por `ciudad` (sin distinguir mayúsculas) y `fecha` |
-| Reglas de negocio al editar eventos | No se puede reducir el aforo por debajo de lo vendido, ni eliminar un tipo con ventas, ni repetir tipos |
+| Reglas de negocio de los eventos | No se puede reducir el aforo por debajo de lo vendido, ni repetir tipos, ni eliminar un evento o un tipo de entrada que tenga compras (aunque estén canceladas) |
 | Compra de entradas | `POST /compras` con control de aforo y bloqueo pesimista frente a compras concurrentes |
 | Estados de compra | Reserva `PENDIENTE`, pago simulado (`CONFIRMADA`) y cancelación (`CANCELADA`) que devuelve el aforo |
 | Listado de compras | `GET /compras` paginado con las compras del usuario del token |
@@ -53,7 +53,7 @@ JWT_SECRET=local docker compose up -d kafka
 
 `docker compose` exige `JWT_SECRET` aunque solo arranques Kafka; aquí basta cualquier valor porque la aplicación no corre en Docker. Sin broker la aplicación arranca, pero no puede publicar ni consumir mensajes.
 
-En local se usa un `JWT_SECRET` de desarrollo incluido en `application.properties`. Para poder crear eventos hace falta un organizador; defínelo antes de arrancar (ver [Organizador inicial](#organizador-inicial)):
+`./gradlew bootRun` y `./gradlew test` usan un `JWT_SECRET` de desarrollo definido en `build.gradle` (solo para esas dos tareas; no se incluye en el jar). Si tienes la variable `JWT_SECRET` definida, se usa la tuya. Para poder crear eventos hace falta un organizador; defínelo antes de arrancar (ver [Organizador inicial](#organizador-inicial)):
 
 ```bash
 ORGANIZADOR_EMAIL=org@example.com ORGANIZADOR_PASSWORD=cambia-esto ./gradlew bootRun
@@ -144,6 +144,7 @@ El registro siempre crea usuarios `USUARIO`, para que nadie pueda asignarse un r
 - Email inexistente y password incorrecto devuelven el mismo `401` con el mismo mensaje, para no revelar qué emails están registrados.
 - Por el mismo motivo, **tardan lo mismo**. Antes, con un email inexistente el login respondía sin ejecutar BCrypt (unos 0,1 ms frente a unos 50 ms con un password incorrecto), y midiendo el tiempo se podía saber si un email existía aunque el body fuera idéntico (*ataque de timing*). Ahora siempre se ejecuta BCrypt: si el email no existe, contra un hash ficticio calculado al arrancar con el mismo encoder. `LoginTiempoDeRespuestaTest` mide los dos casos con BCrypt real.
 - El usuario de una compra sale del token (`sub`), nunca del body: nadie puede comprar en nombre de otro.
+- `JWT_SECRET` no tiene valor por defecto: si falta, la aplicación no arranca. Con una clave por defecto en el repositorio, quien arrancara el jar sin configurarla firmaría los tokens con una clave pública y cualquiera podría fabricarse un token de `ORGANIZADOR`.
 - La API no guarda sesión (`STATELESS`): cada petición se valida solo con su token.
 
 ## API
@@ -160,7 +161,7 @@ El registro siempre crea usuarios `USUARIO`, para que nadie pueda asignarse un r
 | `GET` | `/eventos/{id}` | Obtiene un evento con sus tipos de entrada | `200` / `404` |
 | `POST` | `/eventos` | Crea un evento (`ORGANIZADOR`) | `201` / `400` / `401` / `403` |
 | `PUT` | `/eventos/{id}` | Reemplaza los datos de un evento (`ORGANIZADOR`) | `200` / `400` / `401` / `403` / `404` / `409` |
-| `DELETE` | `/eventos/{id}` | Elimina un evento (`ORGANIZADOR`) | `204` / `401` / `403` / `404` |
+| `DELETE` | `/eventos/{id}` | Elimina un evento sin compras (`ORGANIZADOR`) | `204` / `401` / `403` / `404` / `409` |
 
 Ejemplo de petición (`POST /eventos`):
 
@@ -300,7 +301,7 @@ Los `401` y `403` que genera Spring Security (sin token, token inválido o sin e
 | `401` | Sin token, token inválido o caducado, o email/password incorrectos en el login |
 | `403` | Token válido pero sin el rol necesario (p. ej. un `USUARIO` creando eventos) |
 | `404` | Evento, usuario o tipo de entrada no encontrado |
-| `409` | Aforo insuficiente, email ya registrado o edición que entra en conflicto con entradas ya vendidas |
+| `409` | Aforo insuficiente, email ya registrado, transición de estado no válida, edición que entra en conflicto con entradas ya vendidas, o borrado de un evento o tipo de entrada con compras |
 
 ## Modelo de dominio
 
@@ -354,6 +355,10 @@ erDiagram
 Con la versión inicial el test falla; con el bloqueo pasa.
 
 **Solución.** El tipo de entrada se lee con bloqueo pesimista (`@Lock(LockModeType.PESSIMISTIC_WRITE)` en `TipoEntradaRepository.findByIdForUpdate`, que genera un `SELECT ... FOR UPDATE`). Las compras del mismo tipo de entrada esperan su turno en la base de datos y cada una ve el aforo ya descontado por la anterior. Se eligió el bloqueo pesimista en lugar del optimista (`@Version`) porque la venta de entradas tiene mucha contención sobre la misma fila: con el optimista, la mayoría de compras fallarían y habría que reintentarlas.
+
+**Editar y borrar eventos.** Editar un evento recalcula el aforo disponible de cada tipo de entrada a partir de lo vendido. Si leyera los tipos sin bloquearlos, una compra podría confirmarse entre la lectura y la escritura, y la edición sobrescribiría el aforo con el valor anterior: esa venta se perdería y se podrían vender más entradas que el aforo. Por eso editar y borrar bloquean antes todos los tipos de entrada del evento (`TipoEntradaRepository.findByEventoIdForUpdate`, en orden de id para que dos ediciones no se bloqueen mutuamente). Las compras de ese evento esperan a que termine la edición, y dos ediciones del mismo evento se ejecutan una detrás de otra. `EventoConComprasIntegrationTests.editarElEventoMientrasSeCompraNoPierdeNingunaVenta` lanza 40 compras y 20 ediciones a la vez y comprueba que no se pierde ninguna venta.
+
+Un evento o un tipo de entrada con compras, aunque estén canceladas, no se puede borrar (`409`): las compras son un registro histórico y apuntan a su tipo de entrada.
 
 ## Mensajería con Kafka
 

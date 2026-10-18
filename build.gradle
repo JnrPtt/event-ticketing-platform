@@ -53,3 +53,13 @@ tasks.named('test') {
 tasks.named('bootJar') {
     archiveFileName = 'app.jar'
 }
+
+def jwtSecretDesarrollo = System.getenv('JWT_SECRET') ?: 'mG5TB/kBIf4ZbLk3imXbeNbcMl1iMOg59ORmoDghtJ0='
+
+tasks.named('test') {
+    environment 'JWT_SECRET', jwtSecretDesarrollo
+}
+
+tasks.named('bootRun') {
+    environment 'JWT_SECRET', jwtSecretDesarrollo
+}

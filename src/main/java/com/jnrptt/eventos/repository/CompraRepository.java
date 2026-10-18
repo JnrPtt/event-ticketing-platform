@@ -13,6 +13,10 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 public interface CompraRepository extends JpaRepository<Compra, Long> {
+    boolean existsByTipoEntradaId(Long tipoEntradaId);
+
+    boolean existsByTipoEntradaEventoId(Long eventoId);
+
     @EntityGraph(attributePaths = "tipoEntrada")
     Page<Compra> findByUsuarioId(Long usuarioId, Pageable pageable);
 

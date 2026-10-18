@@ -31,7 +31,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             AforoInsuficienteException.class,
             EmailYaRegistradoException.class,
             AforoMenorQueVendidasException.class,
-            TipoEntradaConVentasException.class,
+            TipoEntradaConComprasException.class,
+            EventoConComprasException.class,
             TransicionEstadoInvalidaException.class
     })
     public ProblemDetail handleConflict(RuntimeException exception) {

@@ -1,6 +1,8 @@
 package com.jnrptt.eventos.controller;
 
 import com.jnrptt.eventos.TestContainersConfiguration;
+import com.jnrptt.eventos.model.Compra;
+import com.jnrptt.eventos.model.EstadoCompra;
 import com.jnrptt.eventos.model.Evento;
 import com.jnrptt.eventos.model.Rol;
 import com.jnrptt.eventos.model.TipoEntrada;
@@ -24,10 +26,12 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -143,6 +147,22 @@ class ErroresIntegrationTests {
                 .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.detail").value(containsString("entradas vendidas (30)")));
+    }
+
+    @Test
+    void borrarUnEventoConComprasDevuelveProblemDetail409() throws Exception {
+        var usuario = usuarioRepository.save(new Usuario(null, "Ana", "ana@example.com", "hash", Rol.USUARIO));
+        var tipoEntrada = creaTipoEntrada(10, 9);
+        compraRepository.save(new Compra(null, 1, EstadoCompra.CONFIRMADA, LocalDateTime.now(),
+                tipoEntrada.getPrecio(), usuario, tipoEntrada));
+        Long eventoId = tipoEntrada.getEvento().getId();
+
+        mockMvc.perform(delete("/eventos/" + eventoId)
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ORGANIZADOR"))))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.detail").value("No se puede eliminar el evento " + eventoId + " porque tiene compras"));
     }
 
     @Test

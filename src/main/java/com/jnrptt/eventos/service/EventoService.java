@@ -2,14 +2,17 @@ package com.jnrptt.eventos.service;
 
 import com.jnrptt.eventos.dto.EventoRequest;
 import com.jnrptt.eventos.exception.AforoMenorQueVendidasException;
+import com.jnrptt.eventos.exception.EventoConComprasException;
 import com.jnrptt.eventos.exception.EventoNotFoundException;
-import com.jnrptt.eventos.exception.TipoEntradaConVentasException;
+import com.jnrptt.eventos.exception.TipoEntradaConComprasException;
 import com.jnrptt.eventos.exception.TipoEntradaRepetidoException;
 import com.jnrptt.eventos.model.Evento;
 import com.jnrptt.eventos.model.TipoEntrada;
 import com.jnrptt.eventos.model.TiposEntrada;
+import com.jnrptt.eventos.repository.CompraRepository;
 import com.jnrptt.eventos.repository.EventoRepository;
 import com.jnrptt.eventos.repository.EventoSpecifications;
+import com.jnrptt.eventos.repository.TipoEntradaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -27,6 +30,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EventoService {
     private final EventoRepository eventoRepository;
+    private final TipoEntradaRepository tipoEntradaRepository;
+    private final CompraRepository compraRepository;
 
     @Transactional
     public Evento createEvento(EventoRequest eventoRequest) {
@@ -52,6 +57,10 @@ public class EventoService {
         if (!eventoRepository.existsById(id)) {
             throw new EventoNotFoundException(id);
         }
+        tipoEntradaRepository.findByEventoIdForUpdate(id);
+        if (compraRepository.existsByTipoEntradaEventoId(id)) {
+            throw new EventoConComprasException(id);
+        }
         eventoRepository.deleteById(id);
     }
 
@@ -59,7 +68,18 @@ public class EventoService {
     public Evento editEventoById(Long id, EventoRequest eventoRequest) {
         validarTiposEntradaUnicos(eventoRequest);
         Evento replacement = eventoRequest.toEvento();
+        tipoEntradaRepository.findByEventoIdForUpdate(id);
         Evento evento = getEventoById(id);
+        Set<TiposEntrada> tiposNuevos = replacement.getTipoEntrada().stream()
+                .map(TipoEntrada::getNombre)
+                .collect(Collectors.toSet());
+        evento.getTipoEntrada().stream()
+                .filter(tipo -> !tiposNuevos.contains(tipo.getNombre()))
+                .filter(tipo -> compraRepository.existsByTipoEntradaId(tipo.getId()))
+                .findFirst()
+                .ifPresent(tipo -> {
+                    throw new TipoEntradaConComprasException(tipo.getNombre());
+                });
         evento.setNombre(replacement.getNombre());
         evento.setDescripcion(replacement.getDescripcion());
         evento.setFecha(replacement.getFecha());
@@ -83,12 +103,6 @@ public class EventoService {
             actual.setAforoTotal(nueva.getAforoTotal());
             actual.setAforoDisponible(nueva.getAforoTotal() - vendidas);
             evento.getTipoEntrada().add(actual);
-        });
-        existentes.values().forEach(eliminada -> {
-            int vendidas = eliminada.getAforoTotal() - eliminada.getAforoDisponible();
-            if (vendidas > 0) {
-                throw new TipoEntradaConVentasException(eliminada.getNombre(), vendidas);
-            }
         });
         return evento;
     }
