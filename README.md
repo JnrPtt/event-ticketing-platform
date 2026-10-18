@@ -1,8 +1,13 @@
 # Event Ticketing Platform (eventos)
 
-> **En desarrollo.** Esta documentación es temporal. La API, el modelo de datos y la configuración pueden cambiar sin previo aviso.
+API REST para vender entradas de eventos: los organizadores publican eventos con tipos de entrada (GENERAL / VIP) y aforo limitado, y los usuarios reservan, pagan y cancelan sus compras.
 
-API REST para gestionar eventos, sus tipos de entrada (GENERAL / VIP) con control de aforo, usuarios y compras de entradas.
+Lo más destacable:
+
+- **Concurrencia.** Bloqueo pesimista para que compras y cancelaciones simultáneas nunca vendan más entradas que el aforo ni lo devuelvan dos veces, con tests que lanzan hasta 20 peticiones a la vez. Ver [Concurrencia en las compras](#concurrencia-en-las-compras).
+- **Seguridad.** JWT con roles, el comprador sale siempre del token y el login no revela qué emails existen, ni por el mensaje ni por el tiempo de respuesta. Ver [Decisiones de seguridad](#decisiones-de-seguridad).
+- **Mensajería.** Kafka publica cada compra confirmada solo tras el commit, con reintentos, *Dead Letter Topic* y protección frente a mensajes envenenados. Ver [Mensajería con Kafka](#mensajería-con-kafka).
+- **Tests.** Más de 100 tests, unitarios con Mockito y de integración contra Kafka real con Testcontainers. Los que cubren un fallo concreto se han visto en rojo rompiendo el código que protegen. Ver [Tests](#tests).
 
 ## Stack
 
@@ -17,18 +22,19 @@ API REST para gestionar eventos, sus tipos de entrada (GENERAL / VIP) con contro
 | Tests           | JUnit 5, Mockito, Testcontainers (Kafka)     |
 | Otros           | Lombok                                       |
 
-## Estado actual
+## Funcionalidades
 
-| Funcionalidad | Estado | Notas |
-|---|---|---|
-| CRUD de eventos con tipos de entrada | ✅ | Filtros opcionales por `ciudad` (sin distinguir mayúsculas) y `fecha` |
-| Reglas de negocio al editar eventos | ✅ | No se puede reducir el aforo por debajo de lo vendido, ni eliminar un tipo con ventas, ni repetir tipos |
-| Compra de entradas | ✅ | `POST /compras` con control de aforo y bloqueo pesimista frente a compras concurrentes |
-| Usuarios | ✅ | Registro y login; organizador inicial creado al arrancar desde variables de entorno |
-| Seguridad | ✅ | JWT (HS256) con roles `USUARIO` / `ORGANIZADOR`; el comprador sale del token |
-| Estados de compra | ✅ | Reserva `PENDIENTE`, pago simulado (`CONFIRMADA`) y cancelación (`CANCELADA`) que devuelve el aforo |
-| Listado de compras | ✅ | `GET /compras` paginado con las compras del usuario del token |
-| Kafka | ✅ | Evento `CompraConfirmada` publicado tras el commit; un consumer simula el email de confirmación (con reintentos y DLT) |
+| Funcionalidad | Detalle |
+|---|---|
+| CRUD de eventos con tipos de entrada | Filtros opcionales por `ciudad` (sin distinguir mayúsculas) y `fecha` |
+| Reglas de negocio al editar eventos | No se puede reducir el aforo por debajo de lo vendido, ni eliminar un tipo con ventas, ni repetir tipos |
+| Compra de entradas | `POST /compras` con control de aforo y bloqueo pesimista frente a compras concurrentes |
+| Estados de compra | Reserva `PENDIENTE`, pago simulado (`CONFIRMADA`) y cancelación (`CANCELADA`) que devuelve el aforo |
+| Listado de compras | `GET /compras` paginado con las compras del usuario del token |
+| Usuarios | Registro y login; organizador inicial creado al arrancar desde variables de entorno |
+| Seguridad | JWT (HS256) con roles `USUARIO` / `ORGANIZADOR`; el comprador sale del token |
+| Kafka | Evento `CompraConfirmada` publicado tras el commit; un consumer simula el email de confirmación (con reintentos y DLT) |
+| Errores | Formato estándar `ProblemDetail` (RFC 9457) en todas las respuestas de error |
 
 ## Arranque rápido
 
@@ -462,19 +468,26 @@ Los tests de integración usan `@SpringBootTest` sobre H2 en memoria. Kafka se l
 - una compra rechazada por aforo no publica nada;
 - un evento publicado dentro de una transacción que hace rollback no llega a enviarse. Con `@EventListener` en lugar de `@TransactionalEventListener(AFTER_COMMIT)`, este test falla.
 
-## Próximos pasos (tentativo)
-
-- [x] Endpoint de compras con control de aforo y concurrencia
-- [x] Autenticación con JWT, registro/login y roles (usuario / organizador); el comprador sale del token
-- [x] Publicación de eventos de compra en Kafka y consumer de notificaciones
-- [x] Estados de compra `PENDIENTE` (pago simulado) y `CANCELADA` (devuelve aforo)
-- [x] Listado paginado de las compras del usuario
-
 ## Posibles mejoras
 
+Fuera del alcance actual.
+
+**Dominio y API**
+
 - **Caducidad de las reservas.** Una compra `PENDIENTE` retiene aforo indefinidamente. Un proceso periódico (`@Scheduled`) podría cancelar las reservas sin pagar tras unos minutos y devolver el aforo.
-- **Eventos de cancelación.** Publicar también las cancelaciones en Kafka (por ejemplo, para un email de devolución). Requiere distinguir tipos de mensaje en un mismo topic, para mantener el orden por `compraId`, o aceptar un topic aparte sin orden garantizado entre ambos.
+- **Eventos con dueño.** Ahora cualquier `ORGANIZADOR` puede editar o borrar cualquier evento. Guardar el organizador en el evento (`Evento.organizador`) permitiría limitar cada uno a los suyos.
+- **Nombre del campo de tipos de entrada.** La petición de eventos usa `tipoEntrada` y la respuesta `tiposEntrada`. Unificarlo es un cambio incompatible de la API, así que habría que versionarla o hacerlo antes de tener clientes.
+
+**Mensajería**
+
 - **Patrón *outbox*.** Guardar el mensaje en una tabla dentro de la misma transacción que la compra y publicarlo desde ahí (con un proceso periódico o con CDC, por ejemplo Debezium). Elimina la pérdida de mensajes si Kafka cae justo después del commit.
 - **Consumer idempotente.** Guardar los `compraId` ya procesados y descartar los repetidos, para que una relectura no envíe el email dos veces.
+- **Eventos de cancelación.** Publicar también las cancelaciones en Kafka (por ejemplo, para un email de devolución). Requiere distinguir tipos de mensaje en un mismo topic, para mantener el orden por `compraId`, o aceptar un topic aparte sin orden garantizado entre ambos.
 - **`@RetryableTopic`.** Reintentos en topics aparte con espera creciente, sin bloquear la partición mientras se reintenta.
 - **DLT con los bytes originales.** Publicar los mensajes no deserializables con un `ByteArraySerializer` para poder reenviarlos tal cual.
+
+**Otras**
+
+- **Caché con Redis** para el listado de eventos, que se lee mucho más de lo que se modifica.
+- **Aforo en tiempo real con WebSocket**, para que los clientes vean cómo bajan las entradas disponibles sin recargar.
+- **Panel de estadísticas** para organizadores: ventas por evento y por tipo de entrada.
